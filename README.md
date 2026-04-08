@@ -191,7 +191,7 @@ extern fn realloc(ptr: *i32, size: i32) -> *i32;
 extern fn free(ptr: *i32) -> void;
 ```
 
-See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that grows with `malloc` / `realloc` / `free`.
+See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that grows with `malloc` / `realloc` / `free`, and [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) for the raw LLVM IR emitted by the current compiler.
 
 ## Build From Source
 
@@ -245,6 +245,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 
 - [`exam.mnst`](./exam.mnst): a Hello, World! starting point with comments summarizing the rest of the current language surface
 - [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst): a manual growable vector built with raw pointers and libc allocation
+- [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll): the raw LLVM IR generated from the growable `VecI32` example
 
 ## Roadmap
 
