@@ -264,6 +264,8 @@ impl Parser {
         let token = self.expect_ident()?;
         match token.lexeme.as_str() {
             "i32" => Ok(Type::I32),
+            "u8" => Ok(Type::U8),
+            "usize" => Ok(Type::USize),
             "bool" => Ok(Type::Bool),
             "str" => Ok(Type::Str),
             "void" => Ok(Type::Void),
@@ -554,12 +556,12 @@ impl Parser {
     }
 
     fn parse_multiplicative(&mut self) -> Result<Expr, String> {
-        let mut left = self.parse_unary()?;
+        let mut left = self.parse_cast()?;
 
         loop {
             if self.at(TokenKind::Star) {
                 self.expect(TokenKind::Star)?;
-                let right = self.parse_unary()?;
+                let right = self.parse_cast()?;
                 left = Expr::Binary {
                     op: BinOp::Mul,
                     left: Box::new(left),
@@ -567,7 +569,7 @@ impl Parser {
                 };
             } else if self.at(TokenKind::Slash) {
                 self.expect(TokenKind::Slash)?;
-                let right = self.parse_unary()?;
+                let right = self.parse_cast()?;
                 left = Expr::Binary {
                     op: BinOp::Div,
                     left: Box::new(left),
@@ -579,6 +581,21 @@ impl Parser {
         }
 
         Ok(left)
+    }
+
+    fn parse_cast(&mut self) -> Result<Expr, String> {
+        let mut expr = self.parse_unary()?;
+
+        while self.at(TokenKind::As) {
+            self.expect(TokenKind::As)?;
+            let ty = self.parse_type()?;
+            expr = Expr::Cast {
+                expr: Box::new(expr),
+                ty,
+            };
+        }
+
+        Ok(expr)
     }
 
     fn parse_unary(&mut self) -> Result<Expr, String> {
@@ -1105,11 +1122,69 @@ mod tests {
     }
 
     #[test]
+    fn parses_u8_usize_and_as_cast() {
+        let program = parse_source(
+            r#"
+            fn main() -> i32 {
+                let byte: u8 = 255 as u8;
+                let size: usize = len([1, 2, 3]) as usize;
+                return byte as i32 + size as i32;
+            }
+            "#,
+        );
+
+        let body = program.functions[0]
+            .body
+            .as_ref()
+            .expect("expected function body");
+
+        assert!(matches!(
+            body[0],
+            Stmt::Let {
+                ty: Type::U8,
+                value: Expr::Cast { ty: Type::U8, .. },
+                ..
+            }
+        ));
+
+        assert!(matches!(
+            body[1],
+            Stmt::Let {
+                ty: Type::USize,
+                value: Expr::Cast {
+                    ty: Type::USize,
+                    ..
+                },
+                ..
+            }
+        ));
+
+        let Stmt::Return(Some(Expr::Binary { left, right, .. })) = &body[2] else {
+            panic!("expected casted addition return");
+        };
+
+        assert!(matches!(
+            left.as_ref(),
+            Expr::Cast {
+                expr,
+                ty: Type::I32,
+            } if matches!(expr.as_ref(), Expr::Var(name) if name == "byte")
+        ));
+        assert!(matches!(
+            right.as_ref(),
+            Expr::Cast {
+                expr,
+                ty: Type::I32,
+            } if matches!(expr.as_ref(), Expr::Var(name) if name == "size")
+        ));
+    }
+
+    #[test]
     fn parses_slice_type_and_slice_call() {
         let program = parse_source(
             r#"
             fn head(values: [i32]) -> i32 {
-                return values[0] + len(values);
+                return values[0] + (len(values) as i32);
             }
 
             fn main() -> i32 {

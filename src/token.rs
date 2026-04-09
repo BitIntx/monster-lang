@@ -5,6 +5,7 @@ pub enum TokenKind {
     Struct,
     Let,
     Mut,
+    As,
     Return,
     If,
     Else,

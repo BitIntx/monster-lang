@@ -91,6 +91,7 @@ impl Lexer {
             "struct" => TokenKind::Struct,
             "let" => TokenKind::Let,
             "mut" => TokenKind::Mut,
+            "as" => TokenKind::As,
             "return" => TokenKind::Return,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,

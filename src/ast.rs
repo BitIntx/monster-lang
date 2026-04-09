@@ -1,6 +1,8 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     I32,
+    U8,
+    USize,
     Bool,
     Str,
     Void,
@@ -65,6 +67,10 @@ pub enum Expr {
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
+    },
+    Cast {
+        expr: Box<Expr>,
+        ty: Type,
     },
 }
 

@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::ast::{BinOp, Expr, Function, Stmt, Type, UnaryOp};
 
 use super::{
-    FunctionSig, StringLiteralData, StructLayout, runtime::llvm_function_name, util::llvm_type,
+    FunctionSig, StringLiteralData, StructLayout,
+    runtime::llvm_function_name,
+    util::{integer_bit_width, is_signed_integer_type, llvm_type},
 };
 
 #[derive(Clone)]
@@ -279,6 +281,7 @@ impl<'a> FunctionEmitter<'a> {
                 repr: value.to_string(),
                 ty: Type::I32,
             }),
+            Expr::Cast { expr, ty } => self.emit_cast(expr, ty),
             Expr::Bool(value) => Ok(Value {
                 repr: if *value { "1".into() } else { "0".into() },
                 ty: Type::Bool,
@@ -458,8 +461,7 @@ impl<'a> FunctionEmitter<'a> {
     fn emit_index(&mut self, base: &Expr, index: &Expr) -> Result<Value, String> {
         let base = self.emit_expr(base)?;
         let index = self.emit_expr(index)?;
-        let index_i64 = self.fresh_temp("idx");
-        self.emit_assign(&index_i64, format!("sext i32 {} to i64", index.repr));
+        let index_i64 = self.emit_index_value_as_i64(&index)?;
 
         match &base.ty {
             Type::Array(element_ty, _) => {
@@ -605,7 +607,7 @@ impl<'a> FunctionEmitter<'a> {
         match value.ty {
             Type::Array(_, len) => Ok(Value {
                 repr: len.to_string(),
-                ty: Type::I32,
+                ty: Type::USize,
             }),
             Type::Slice(_) => {
                 let len = self.fresh_temp("slice.len");
@@ -615,7 +617,7 @@ impl<'a> FunctionEmitter<'a> {
                 );
                 Ok(Value {
                     repr: len,
-                    ty: Type::I32,
+                    ty: Type::USize,
                 })
             }
             _ => Err("internal error: len() requires an array or slice value".to_string()),
@@ -695,7 +697,7 @@ impl<'a> FunctionEmitter<'a> {
         self.emit_assign(
             &with_len,
             format!(
-                "insertvalue {} {}, i32 {}, 1",
+                "insertvalue {} {}, i64 {}, 1",
                 llvm_type(&slice_ty),
                 with_ptr,
                 len
@@ -781,12 +783,21 @@ impl<'a> FunctionEmitter<'a> {
         let left = self.emit_expr(left)?;
         let right = self.emit_expr(right)?;
         let temp = self.fresh_temp("bin");
+        let operand_ty = left.ty.clone();
+        let llvm_operand_ty = llvm_type(&operand_ty);
 
         let instruction = match op {
-            BinOp::Add => format!("add i32 {}, {}", left.repr, right.repr),
-            BinOp::Sub => format!("sub i32 {}, {}", left.repr, right.repr),
-            BinOp::Mul => format!("mul i32 {}, {}", left.repr, right.repr),
-            BinOp::Div => format!("sdiv i32 {}, {}", left.repr, right.repr),
+            BinOp::Add => format!("add {} {}, {}", llvm_operand_ty, left.repr, right.repr),
+            BinOp::Sub => format!("sub {} {}, {}", llvm_operand_ty, left.repr, right.repr),
+            BinOp::Mul => format!("mul {} {}, {}", llvm_operand_ty, left.repr, right.repr),
+            BinOp::Div => {
+                let opcode = if is_signed_integer_type(&operand_ty) {
+                    "sdiv"
+                } else {
+                    "udiv"
+                };
+                format!("{opcode} {} {}, {}", llvm_operand_ty, left.repr, right.repr)
+            }
             BinOp::Eq => format!(
                 "icmp eq {} {}, {}",
                 llvm_type(&left.ty),
@@ -799,17 +810,30 @@ impl<'a> FunctionEmitter<'a> {
                 left.repr,
                 right.repr
             ),
-            BinOp::Lt => format!("icmp slt i32 {}, {}", left.repr, right.repr),
-            BinOp::Le => format!("icmp sle i32 {}, {}", left.repr, right.repr),
-            BinOp::Gt => format!("icmp sgt i32 {}, {}", left.repr, right.repr),
-            BinOp::Ge => format!("icmp sge i32 {}, {}", left.repr, right.repr),
+            BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+                let predicate = match (op, is_signed_integer_type(&operand_ty)) {
+                    (BinOp::Lt, true) => "slt",
+                    (BinOp::Le, true) => "sle",
+                    (BinOp::Gt, true) => "sgt",
+                    (BinOp::Ge, true) => "sge",
+                    (BinOp::Lt, false) => "ult",
+                    (BinOp::Le, false) => "ule",
+                    (BinOp::Gt, false) => "ugt",
+                    (BinOp::Ge, false) => "uge",
+                    _ => unreachable!("logical ops handled separately"),
+                };
+                format!(
+                    "icmp {} {} {}, {}",
+                    predicate, llvm_operand_ty, left.repr, right.repr
+                )
+            }
             BinOp::Or | BinOp::And => unreachable!("handled separately"),
         };
 
         self.emit_assign(&temp, instruction);
 
         let ty = match op {
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => Type::I32,
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => operand_ty,
             BinOp::Eq
             | BinOp::Ne
             | BinOp::Lt
@@ -828,10 +852,13 @@ impl<'a> FunctionEmitter<'a> {
             UnaryOp::Neg => {
                 let expr = self.emit_expr(expr)?;
                 let temp = self.fresh_temp("unary");
-                self.emit_assign(&temp, format!("sub i32 0, {}", expr.repr));
+                self.emit_assign(
+                    &temp,
+                    format!("sub {} 0, {}", llvm_type(&expr.ty), expr.repr),
+                );
                 Ok(Value {
                     repr: temp,
-                    ty: Type::I32,
+                    ty: expr.ty,
                 })
             }
             UnaryOp::Not => {
@@ -867,6 +894,123 @@ impl<'a> FunctionEmitter<'a> {
                 })
             }
         }
+    }
+
+    fn emit_cast(&mut self, expr: &Expr, target_ty: &Type) -> Result<Value, String> {
+        let value = self.emit_expr(expr)?;
+        if value.ty == *target_ty {
+            return Ok(value);
+        }
+
+        match (&value.ty, target_ty) {
+            (Type::Str, Type::Ptr(inner_ty)) if **inner_ty == Type::U8 => Ok(Value {
+                repr: value.repr,
+                ty: target_ty.clone(),
+            }),
+            (Type::Ptr(inner_ty), Type::Str) if **inner_ty == Type::U8 => Ok(Value {
+                repr: value.repr,
+                ty: Type::Str,
+            }),
+            (Type::Ptr(_), Type::Ptr(_)) => Ok(Value {
+                repr: value.repr,
+                ty: target_ty.clone(),
+            }),
+            (Type::Ptr(_), Type::USize) => {
+                let temp = self.fresh_temp("cast");
+                self.emit_assign(&temp, format!("ptrtoint ptr {} to i64", value.repr));
+                Ok(Value {
+                    repr: temp,
+                    ty: Type::USize,
+                })
+            }
+            (Type::USize, Type::Ptr(_)) => {
+                let temp = self.fresh_temp("cast");
+                self.emit_assign(&temp, format!("inttoptr i64 {} to ptr", value.repr));
+                Ok(Value {
+                    repr: temp,
+                    ty: target_ty.clone(),
+                })
+            }
+            _ => self.emit_integer_cast(value, target_ty),
+        }
+    }
+
+    fn emit_integer_cast(&mut self, value: Value, target_ty: &Type) -> Result<Value, String> {
+        let Some(from_bits) = integer_bit_width(&value.ty) else {
+            return Err(format!(
+                "internal error: unsupported cast from {}",
+                llvm_type(&value.ty)
+            ));
+        };
+        let Some(to_bits) = integer_bit_width(target_ty) else {
+            return Err(format!(
+                "internal error: unsupported cast to {}",
+                llvm_type(target_ty)
+            ));
+        };
+
+        if value.ty == *target_ty {
+            return Ok(value);
+        }
+
+        if *target_ty == Type::Bool {
+            let temp = self.fresh_temp("cast");
+            self.emit_assign(
+                &temp,
+                format!("icmp ne {} {}, 0", llvm_type(&value.ty), value.repr),
+            );
+            return Ok(Value {
+                repr: temp,
+                ty: Type::Bool,
+            });
+        }
+
+        if value.ty == Type::Bool {
+            let temp = self.fresh_temp("cast");
+            self.emit_assign(
+                &temp,
+                format!("zext i1 {} to {}", value.repr, llvm_type(target_ty)),
+            );
+            return Ok(Value {
+                repr: temp,
+                ty: target_ty.clone(),
+            });
+        }
+
+        if from_bits == to_bits {
+            return Ok(Value {
+                repr: value.repr,
+                ty: target_ty.clone(),
+            });
+        }
+
+        let temp = self.fresh_temp("cast");
+        let instruction = if from_bits < to_bits {
+            let opcode = if is_signed_integer_type(&value.ty) {
+                "sext"
+            } else {
+                "zext"
+            };
+            format!(
+                "{} {} {} to {}",
+                opcode,
+                llvm_type(&value.ty),
+                value.repr,
+                llvm_type(target_ty)
+            )
+        } else {
+            format!(
+                "trunc {} {} to {}",
+                llvm_type(&value.ty),
+                value.repr,
+                llvm_type(target_ty)
+            )
+        };
+        self.emit_assign(&temp, instruction);
+        Ok(Value {
+            repr: temp,
+            ty: target_ty.clone(),
+        })
     }
 
     fn emit_store(&mut self, value: &Value, ptr: &str) {
@@ -907,6 +1051,8 @@ impl<'a> FunctionEmitter<'a> {
     fn emit_default_return(&mut self) {
         match &self.function.ret_type {
             Type::I32 => self.emit_terminator("ret i32 0".to_string()),
+            Type::U8 => self.emit_terminator("ret i8 0".to_string()),
+            Type::USize => self.emit_terminator("ret i64 0".to_string()),
             Type::Bool => self.emit_terminator("ret i1 0".to_string()),
             Type::Str => self.emit_terminator("ret ptr null".to_string()),
             Type::Ptr(_) => self.emit_terminator("ret ptr null".to_string()),
@@ -973,8 +1119,7 @@ impl<'a> FunctionEmitter<'a> {
             }
             Expr::Index { base, index } => {
                 let index = self.emit_expr(index)?;
-                let index_i64 = self.fresh_temp("idx");
-                self.emit_assign(&index_i64, format!("sext i32 {} to i64", index.repr));
+                let index_i64 = self.emit_index_value_as_i64(&index)?;
 
                 let base_value = self.emit_expr(base)?;
                 match &base_value.ty {
@@ -1070,6 +1215,18 @@ impl<'a> FunctionEmitter<'a> {
                 })
             }
             _ => Err("internal error: expression is not addressable".to_string()),
+        }
+    }
+
+    fn emit_index_value_as_i64(&mut self, index: &Value) -> Result<String, String> {
+        match index.ty {
+            Type::I32 => {
+                let index_i64 = self.fresh_temp("idx");
+                self.emit_assign(&index_i64, format!("sext i32 {} to i64", index.repr));
+                Ok(index_i64)
+            }
+            Type::USize => Ok(index.repr.clone()),
+            _ => Err("internal error: array index must be i32 or usize".to_string()),
         }
     }
 

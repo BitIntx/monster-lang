@@ -182,7 +182,7 @@ fn emits_slice_creation_and_indexing() {
     let ir = emit_source(
         r#"
         fn head(values: [i32]) -> i32 {
-            return values[0] + len(values);
+            return values[0] + (len(values) as i32);
         }
 
         fn main() -> i32 {
@@ -192,11 +192,12 @@ fn emits_slice_creation_and_indexing() {
         "#,
     );
 
-    assert!(ir.contains("define i32 @head({ ptr, i32 } %values) {"));
-    assert!(ir.contains("insertvalue { ptr, i32 } poison, ptr"));
-    assert!(ir.contains("insertvalue { ptr, i32 } %slice."));
-    assert!(ir.contains("extractvalue { ptr, i32 } %"));
-    assert!(ir.contains("call i32 @head({ ptr, i32 }"));
+    assert!(ir.contains("define i32 @head({ ptr, i64 } %values) {"));
+    assert!(ir.contains("insertvalue { ptr, i64 } poison, ptr"));
+    assert!(ir.contains("insertvalue { ptr, i64 } %slice."));
+    assert!(ir.contains("extractvalue { ptr, i64 } %"));
+    assert!(ir.contains("call i32 @head({ ptr, i64 }"));
+    assert!(ir.contains("trunc i64 %slice.len."));
 }
 
 #[test]
@@ -284,7 +285,7 @@ fn emits_array_index_assignment_and_len_builtin() {
         fn main() -> i32 {
             let mut values: [i32; 3] = [10, 20, 30];
             values[1] = 99;
-            print_i32(len(values));
+            print_i32(len(values) as i32);
             return values[1];
         }
         "#,
@@ -292,7 +293,27 @@ fn emits_array_index_assignment_and_len_builtin() {
 
     assert!(ir.contains("getelementptr inbounds [3 x i32], ptr %values.addr.0, i64 0, i64 %idx."));
     assert!(ir.contains("store i32 99, ptr %elem.ptr."));
-    assert!(ir.contains("call void @__monster_builtin_print_i32(i32 3)"));
+    assert!(ir.contains("trunc i64 3 to i32"));
+    assert!(ir.contains("call void @__monster_builtin_print_i32(i32 %cast."));
+}
+
+#[test]
+fn emits_u8_usize_and_as_casts() {
+    let ir = emit_source(
+        r#"
+        fn main() -> i32 {
+            let byte: u8 = 255 as u8;
+            let size: usize = len([1, 2, 3]);
+            let total: usize = (byte as usize) + size;
+            return total as i32;
+        }
+        "#,
+    );
+
+    assert!(ir.contains("trunc i32 255 to i8"));
+    assert!(ir.contains("zext i8 %"));
+    assert!(ir.contains("add i64 %"));
+    assert!(ir.contains("trunc i64 %"));
 }
 
 #[test]

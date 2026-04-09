@@ -164,7 +164,7 @@ impl Analyzer {
                 let mut current_ty = var.ty;
                 for index in indices {
                     let index_ty = self.analyze_expr(index)?;
-                    self.expect_type(&index_ty, &Type::I32, "array index")?;
+                    self.expect_index_type(&index_ty, "array index")?;
 
                     current_ty = match current_ty {
                         Type::Array(element_ty, _)
@@ -297,6 +297,20 @@ impl Analyzer {
     fn analyze_expr(&mut self, expr: &Expr) -> Result<Type, String> {
         match expr {
             Expr::Int(_) => Ok(Type::I32),
+            Expr::Cast { expr, ty } => {
+                self.ensure_value_type(ty, "cast target")?;
+                let expr_ty = self.analyze_expr(expr)?;
+
+                if can_cast(&expr_ty, ty) {
+                    Ok(ty.clone())
+                } else {
+                    Err(format!(
+                        "cannot cast {} to {}",
+                        type_name(&expr_ty),
+                        type_name(ty)
+                    ))
+                }
+            }
             Expr::Bool(_) => Ok(Type::Bool),
             Expr::Str(_) => Ok(Type::Str),
             Expr::Var(name) => self
@@ -368,7 +382,7 @@ impl Analyzer {
             Expr::Index { base, index } => {
                 let base_ty = self.analyze_expr(base)?;
                 let index_ty = self.analyze_expr(index)?;
-                self.expect_type(&index_ty, &Type::I32, "array index")?;
+                self.expect_index_type(&index_ty, "array index")?;
 
                 let element_ty = match base_ty {
                     Type::Array(element_ty, _) | Type::Slice(element_ty) => element_ty,
@@ -443,9 +457,9 @@ impl Analyzer {
                         Ok(Type::Bool)
                     }
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                        self.expect_type(&left_ty, &Type::I32, "left-hand arithmetic operand")?;
-                        self.expect_type(&right_ty, &Type::I32, "right-hand arithmetic operand")?;
-                        Ok(Type::I32)
+                        self.expect_integer_type(&left_ty, "left-hand arithmetic operand")?;
+                        self.expect_type(&right_ty, &left_ty, "right-hand arithmetic operand")?;
+                        Ok(left_ty)
                     }
                     BinOp::Eq | BinOp::Ne => {
                         if matches!(left_ty, Type::Named(_) | Type::Array(_, _) | Type::Slice(_)) {
@@ -457,8 +471,8 @@ impl Analyzer {
                         Ok(Type::Bool)
                     }
                     BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-                        self.expect_type(&left_ty, &Type::I32, "left-hand comparison operand")?;
-                        self.expect_type(&right_ty, &Type::I32, "right-hand comparison operand")?;
+                        self.expect_integer_type(&left_ty, "left-hand comparison operand")?;
+                        self.expect_type(&right_ty, &left_ty, "right-hand comparison operand")?;
                         Ok(Type::Bool)
                     }
                 }
@@ -515,7 +529,7 @@ impl Analyzer {
             Expr::Index { base, index } => {
                 let base_ty = self.analyze_expr(base)?;
                 let index_ty = self.analyze_expr(index)?;
-                self.expect_type(&index_ty, &Type::I32, "array index")?;
+                self.expect_index_type(&index_ty, "array index")?;
 
                 match base_ty {
                     Type::Array(element_ty, _)
@@ -568,9 +582,31 @@ impl Analyzer {
         }
     }
 
+    fn expect_integer_type(&self, ty: &Type, context: &str) -> Result<(), String> {
+        if is_integer_type(ty) {
+            Ok(())
+        } else {
+            Err(format!(
+                "{context} has type {}, expected integer",
+                type_name(ty)
+            ))
+        }
+    }
+
+    fn expect_index_type(&self, ty: &Type, context: &str) -> Result<(), String> {
+        if is_index_type(ty) {
+            Ok(())
+        } else {
+            Err(format!(
+                "{context} has type {}, expected i32 or usize",
+                type_name(ty)
+            ))
+        }
+    }
+
     fn ensure_known_type(&self, ty: &Type) -> Result<(), String> {
         match ty {
-            Type::I32 | Type::Bool | Type::Str | Type::Void => Ok(()),
+            Type::I32 | Type::U8 | Type::USize | Type::Bool | Type::Str | Type::Void => Ok(()),
             Type::Array(element_ty, _) => self.ensure_value_type(element_ty, "array element"),
             Type::Slice(element_ty) => self.ensure_value_type(element_ty, "slice element"),
             Type::Ptr(element_ty) => self.ensure_known_type(element_ty),
@@ -640,7 +676,7 @@ impl Analyzer {
 
         let value_ty = self.analyze_expr(&args[0])?;
         match value_ty {
-            Type::Array(_, _) | Type::Slice(_) => Ok(Type::I32),
+            Type::Array(_, _) | Type::Slice(_) => Ok(Type::USize),
             _ => Err(format!(
                 "argument 1 of 'len' has type {}, expected array or slice",
                 type_name(&value_ty)
@@ -671,6 +707,8 @@ impl Analyzer {
 fn type_name(ty: &Type) -> String {
     match ty {
         Type::I32 => "i32".to_string(),
+        Type::U8 => "u8".to_string(),
+        Type::USize => "usize".to_string(),
         Type::Bool => "bool".to_string(),
         Type::Str => "str".to_string(),
         Type::Void => "void".to_string(),
@@ -679,6 +717,50 @@ fn type_name(ty: &Type) -> String {
         Type::Slice(element_ty) => format!("[{}]", type_name(element_ty)),
         Type::Ptr(element_ty) => format!("*{}", type_name(element_ty)),
     }
+}
+
+fn is_integer_type(ty: &Type) -> bool {
+    matches!(ty, Type::I32 | Type::U8 | Type::USize)
+}
+
+fn is_index_type(ty: &Type) -> bool {
+    matches!(ty, Type::I32 | Type::USize)
+}
+
+fn can_cast(from: &Type, to: &Type) -> bool {
+    if from == to {
+        return true;
+    }
+
+    if is_integer_type(from) && is_integer_type(to) {
+        return true;
+    }
+
+    if matches!(from, Type::Bool) && is_integer_type(to) {
+        return true;
+    }
+
+    if is_integer_type(from) && matches!(to, Type::Bool) {
+        return true;
+    }
+
+    if matches!(from, Type::Ptr(_)) && matches!(to, Type::Ptr(_)) {
+        return true;
+    }
+
+    if (matches!(from, Type::Ptr(_)) && matches!(to, Type::USize))
+        || (matches!(from, Type::USize) && matches!(to, Type::Ptr(_)))
+    {
+        return true;
+    }
+
+    if (matches!(from, Type::Str) && matches!(to, Type::Ptr(inner) if **inner == Type::U8))
+        || (matches!(from, Type::Ptr(inner) if **inner == Type::U8) && matches!(to, Type::Str))
+    {
+        return true;
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -1003,7 +1085,7 @@ mod tests {
         let result = analyze_source(
             r#"
             fn head(values: [i32]) -> i32 {
-                return values[0] + len(values);
+                return values[0] + (len(values) as i32);
             }
 
             fn main() -> i32 {
@@ -1040,12 +1122,50 @@ mod tests {
             fn main() -> i32 {
                 let mut values: [i32; 3] = [10, 20, 30];
                 values[1] = 99;
-                return len(values);
+                return len(values) as i32;
             }
             "#,
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accepts_u8_usize_arithmetic_and_casts() {
+        let result = analyze_source(
+            r#"
+            fn main() -> i32 {
+                let byte: u8 = 255 as u8;
+                let size: usize = len([1, 2, 3]);
+                let total: usize = (byte as usize) + size;
+                return total as i32;
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_scalar_cast() {
+        let result = analyze_source(
+            r#"
+            struct Pair {
+                left: i32,
+                right: i32,
+            }
+
+            fn main() -> i32 {
+                let pair: Pair = Pair { left: 1, right: 2 };
+                return pair as i32;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("cannot cast Pair to i32")
+        ));
     }
 
     #[test]

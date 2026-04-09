@@ -243,6 +243,7 @@ fn collect_strings_from_expr(
             collect_strings_from_expr(left, string_literals, next_index);
             collect_strings_from_expr(right, string_literals, next_index);
         }
+        Expr::Cast { expr, .. } => collect_strings_from_expr(expr, string_literals, next_index),
         Expr::Unary { expr, .. } => collect_strings_from_expr(expr, string_literals, next_index),
         Expr::Int(_) | Expr::Bool(_) | Expr::Var(_) => {}
     }
