@@ -84,13 +84,16 @@ After installing `mst`, you can use it directly from your terminal:
 mst check exam.mnst
 mst emit-llvm exam.mnst
 mst build exam.mnst
+mst build --debug exam.mnst
 mst run exam.mnst
+mst run --debug exam.mnst
 mst clean
 mst --help
 mst --version
 ```
 
 Generated binaries and intermediate LLVM files are written to `target/mst/`.
+`--debug` builds skip LLVM `-O2` optimization and link with `clang -g -O0`.
 
 ## VS Code
 
@@ -213,7 +216,9 @@ Run the compiler directly with Cargo:
 cargo run -- check exam.mnst
 cargo run -- emit-llvm exam.mnst
 cargo run -- build exam.mnst
+cargo run -- build --debug exam.mnst
 cargo run -- run exam.mnst
+cargo run -- run --debug exam.mnst
 cargo run -- clean
 cargo run -- --help
 cargo run -- --version
@@ -225,7 +230,9 @@ Or run the built compiler binary:
 ./target/debug/mst check exam.mnst
 ./target/debug/mst emit-llvm exam.mnst
 ./target/debug/mst build exam.mnst
+./target/debug/mst build --debug exam.mnst
 ./target/debug/mst run exam.mnst
+./target/debug/mst run --debug exam.mnst
 ./target/debug/mst clean
 ./target/debug/mst --help
 ./target/debug/mst --version

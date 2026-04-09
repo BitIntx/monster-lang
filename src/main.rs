@@ -14,6 +14,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuildMode {
+    Release,
+    Debug,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuildArgs {
+    input: String,
+    mode: BuildMode,
+}
+
 fn main() {
     if let Err(err) = real_main() {
         eprintln!("error: {err}");
@@ -62,14 +74,14 @@ fn real_main() -> Result<(), String> {
             Ok(())
         }
         "build" => {
-            let input = single_input_arg(args)?;
-            let output = build_to_binary(&input)?;
+            let build_args = parse_build_args(args)?;
+            let output = build_to_binary(&build_args.input, build_args.mode)?;
             println!("built: {}", output.display());
             Ok(())
         }
         "run" => {
-            let input = single_input_arg(args)?;
-            let output = build_to_binary(&input)?;
+            let build_args = parse_build_args(args)?;
+            let output = build_to_binary(&build_args.input, build_args.mode)?;
             let status = Command::new(&output)
                 .status()
                 .map_err(|e| format!("failed to run '{}': {}", output.display(), e))?;
@@ -97,7 +109,9 @@ fn usage() -> String {
         "  mst check <file.mnst>",
         "  mst emit-llvm <file.mnst>",
         "  mst build <file.mnst>",
+        "  mst build --debug <file.mnst>",
         "  mst run <file.mnst>",
+        "  mst run --debug <file.mnst>",
         "  mst clean",
         "  mst help",
         "  mst version",
@@ -105,6 +119,7 @@ fn usage() -> String {
         "options:",
         "  -h, --help      show this help",
         "  -V, --version   show compiler version",
+        "  --debug         build without LLVM -O2 and link with clang -g -O0",
     ]
     .join("\n")
         + "\n"
@@ -118,6 +133,27 @@ fn single_input_arg(mut args: impl Iterator<Item = String>) -> Result<String, St
     }
 
     Ok(input)
+}
+
+fn parse_build_args(args: impl Iterator<Item = String>) -> Result<BuildArgs, String> {
+    let mut input = None;
+    let mut mode = BuildMode::Release;
+
+    for arg in args {
+        match arg.as_str() {
+            "--debug" => mode = BuildMode::Debug,
+            _ if arg.starts_with('-') => return Err(format!("unknown option: {arg}")),
+            _ => {
+                if input.is_some() {
+                    return Err("too many arguments".into());
+                }
+                input = Some(arg);
+            }
+        }
+    }
+
+    let input = input.ok_or_else(usage)?;
+    Ok(BuildArgs { input, mode })
 }
 
 fn load_program(path: &str) -> Result<ast::Program, String> {
@@ -137,7 +173,7 @@ fn load_program(path: &str) -> Result<ast::Program, String> {
     Ok(program)
 }
 
-fn build_to_binary(input: &str) -> Result<PathBuf, String> {
+fn build_to_binary(input: &str, mode: BuildMode) -> Result<PathBuf, String> {
     let program = load_program(input)?;
     let llvm_ir = emit_llvm_program(&program)?;
 
@@ -164,16 +200,58 @@ fn build_to_binary(input: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("failed to write '{}': {}", ll_path.display(), e))?;
 
     verify_llvm_ir(&ll_path)?;
-    optimize_llvm_ir(&ll_path, &opt_ll_path)?;
-    verify_llvm_ir(&opt_ll_path)?;
 
+    let compile_input = match mode {
+        BuildMode::Release => {
+            optimize_llvm_ir(&ll_path, &opt_ll_path)?;
+            verify_llvm_ir(&opt_ll_path)?;
+            opt_ll_path.as_path()
+        }
+        BuildMode::Debug => {
+            if opt_ll_path.exists() {
+                fs::remove_file(&opt_ll_path).map_err(|e| {
+                    format!(
+                        "failed to remove stale optimized LLVM IR '{}': {}",
+                        opt_ll_path.display(),
+                        e
+                    )
+                })?;
+            }
+            ll_path.as_path()
+        }
+    };
+
+    compile_to_native(input, compile_input, &out_path, mode)?;
+
+    fs::canonicalize(&out_path).map_err(|e| {
+        format!(
+            "built '{}', but failed to resolve output path '{}': {}",
+            input,
+            out_path.display(),
+            e
+        )
+    })
+}
+
+fn compile_to_native(
+    input: &str,
+    llvm_input: &Path,
+    output_path: &Path,
+    mode: BuildMode,
+) -> Result<(), String> {
     let clang = find_tool(&["clang-18", "clang"])
         .ok_or_else(|| "failed to find clang-18 or clang on PATH".to_string())?;
 
-    let output = Command::new(&clang)
-        .arg(&opt_ll_path)
+    let mut command = Command::new(&clang);
+    command.arg(llvm_input);
+
+    if mode == BuildMode::Debug {
+        command.arg("-g").arg("-O0");
+    }
+
+    let output = command
         .arg("-o")
-        .arg(&out_path)
+        .arg(output_path)
         .output()
         .map_err(|e| format!("failed to execute {}: {}", clang, e))?;
 
@@ -185,14 +263,7 @@ fn build_to_binary(input: &str) -> Result<PathBuf, String> {
         ));
     }
 
-    fs::canonicalize(&out_path).map_err(|e| {
-        format!(
-            "built '{}', but failed to resolve output path '{}': {}",
-            input,
-            out_path.display(),
-            e
-        )
-    })
+    Ok(())
 }
 
 fn build_artifact_dir() -> Result<PathBuf, String> {
@@ -279,4 +350,56 @@ fn find_tool(candidates: &[&str]) -> Option<String> {
             None
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BuildArgs, BuildMode, parse_build_args};
+
+    #[test]
+    fn parses_release_build_args() {
+        let parsed = parse_build_args(vec!["exam.mnst".to_string()].into_iter()).unwrap();
+        assert_eq!(
+            parsed,
+            BuildArgs {
+                input: "exam.mnst".to_string(),
+                mode: BuildMode::Release,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_debug_build_args_before_input() {
+        let parsed =
+            parse_build_args(vec!["--debug".to_string(), "exam.mnst".to_string()].into_iter())
+                .unwrap();
+        assert_eq!(
+            parsed,
+            BuildArgs {
+                input: "exam.mnst".to_string(),
+                mode: BuildMode::Debug,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_debug_build_args_after_input() {
+        let parsed =
+            parse_build_args(vec!["exam.mnst".to_string(), "--debug".to_string()].into_iter())
+                .unwrap();
+        assert_eq!(
+            parsed,
+            BuildArgs {
+                input: "exam.mnst".to_string(),
+                mode: BuildMode::Debug,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_build_option() {
+        let err = parse_build_args(vec!["--wat".to_string(), "exam.mnst".to_string()].into_iter())
+            .unwrap_err();
+        assert!(err.contains("unknown option"));
+    }
 }
