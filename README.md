@@ -39,13 +39,13 @@ mst --version
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.sh | env MST_VERSION=v0.1.0-rc1 bash
+curl -fsSL https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.sh | env MST_VERSION=v0.1.0-rc2 bash
 ```
 
 Pin a specific release on Windows PowerShell:
 
 ```powershell
-$env:MST_VERSION = "v0.1.0-rc1"
+$env:MST_VERSION = "v0.1.0-rc2"
 irm https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.ps1 | iex
 ```
 
