@@ -1,0 +1,20 @@
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn is_red(color: Color) -> bool {
+    return color == Red;
+}
+
+fn main() -> i32 {
+    let color: Color = Green;
+
+    if is_red(color) {
+        return 1;
+    }
+
+    print_ln_str("enum value matched");
+    return 0;
+}

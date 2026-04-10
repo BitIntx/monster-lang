@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{BinOp, Expr, Function, Stmt, Type, UnaryOp};
 
 use super::{
-    FunctionSig, StringLiteralData, StructLayout,
+    EnumVariantInfo, FunctionSig, StringLiteralData, StructLayout,
     runtime::llvm_function_name,
     util::{integer_bit_width, is_signed_integer_type, llvm_type},
 };
@@ -36,6 +36,8 @@ pub(super) struct FunctionEmitter<'a> {
     function: &'a Function,
     function_sigs: &'a HashMap<String, FunctionSig>,
     struct_layouts: &'a HashMap<String, StructLayout>,
+    enum_names: &'a HashSet<String>,
+    enum_variants: &'a HashMap<String, EnumVariantInfo>,
     string_literals: &'a HashMap<String, StringLiteralData>,
     entry_allocas: Vec<String>,
     body_lines: Vec<String>,
@@ -53,12 +55,16 @@ impl<'a> FunctionEmitter<'a> {
         function: &'a Function,
         function_sigs: &'a HashMap<String, FunctionSig>,
         struct_layouts: &'a HashMap<String, StructLayout>,
+        enum_names: &'a HashSet<String>,
+        enum_variants: &'a HashMap<String, EnumVariantInfo>,
         string_literals: &'a HashMap<String, StringLiteralData>,
     ) -> Self {
         Self {
             function,
             function_sigs,
             struct_layouts,
+            enum_names,
+            enum_variants,
             string_literals,
             entry_allocas: Vec::new(),
             body_lines: Vec::new(),
@@ -86,7 +92,12 @@ impl<'a> FunctionEmitter<'a> {
         for (name, ty) in &self.function.params {
             let ptr = self.create_stack_slot(name, ty);
             self.declare_local(name, ty.clone(), ptr.clone())?;
-            self.emit_line(format!("store {} %{}, ptr {}", llvm_type(ty), name, ptr));
+            self.emit_line(format!(
+                "store {} %{}, ptr {}",
+                self.llvm_type(ty),
+                name,
+                ptr
+            ));
         }
 
         self.emit_stmts(body, false)?;
@@ -100,14 +111,14 @@ impl<'a> FunctionEmitter<'a> {
             .function
             .params
             .iter()
-            .map(|(name, ty)| format!("{} %{}", llvm_type(ty), name))
+            .map(|(name, ty)| format!("{} %{}", self.llvm_type(ty), name))
             .collect::<Vec<_>>()
             .join(", ");
 
         let mut out = String::new();
         out.push_str(&format!(
             "define {} @{}({}) {{\n",
-            llvm_type(&self.function.ret_type),
+            self.llvm_type(&self.function.ret_type),
             self.function.name,
             params
         ));
@@ -146,6 +157,10 @@ impl<'a> FunctionEmitter<'a> {
         }
 
         Ok(())
+    }
+
+    fn llvm_type(&self, ty: &Type) -> String {
+        llvm_type(ty, self.enum_names)
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
@@ -216,7 +231,7 @@ impl<'a> FunctionEmitter<'a> {
             }
             Stmt::Return(Some(expr)) => {
                 let value = self.emit_expr(expr)?;
-                self.emit_terminator(format!("ret {} {}", llvm_type(&value.ty), value.repr));
+                self.emit_terminator(format!("ret {} {}", self.llvm_type(&value.ty), value.repr));
                 Ok(())
             }
             Stmt::Return(None) => {
@@ -311,6 +326,7 @@ impl<'a> FunctionEmitter<'a> {
                 repr: value.to_string(),
                 ty: Type::I32,
             }),
+            Expr::SizeOf(ty) => self.emit_sizeof(ty),
             Expr::Cast { expr, ty } => self.emit_cast(expr, ty),
             Expr::Bool(value) => Ok(Value {
                 repr: if *value { "1".into() } else { "0".into() },
@@ -330,19 +346,24 @@ impl<'a> FunctionEmitter<'a> {
                 })
             }
             Expr::Var(name) => {
-                let local = self
-                    .lookup_local(name)
-                    .cloned()
-                    .ok_or_else(|| format!("internal error: unknown variable '{name}'"))?;
-                let temp = self.fresh_temp("load");
-                self.emit_assign(
-                    &temp,
-                    format!("load {}, ptr {}", llvm_type(&local.ty), local.ptr),
-                );
-                Ok(Value {
-                    repr: temp,
-                    ty: local.ty,
-                })
+                if let Some(local) = self.lookup_local(name).cloned() {
+                    let temp = self.fresh_temp("load");
+                    self.emit_assign(
+                        &temp,
+                        format!("load {}, ptr {}", self.llvm_type(&local.ty), local.ptr),
+                    );
+                    Ok(Value {
+                        repr: temp,
+                        ty: local.ty,
+                    })
+                } else if let Some(variant) = self.enum_variants.get(name) {
+                    Ok(Value {
+                        repr: variant.discriminant.to_string(),
+                        ty: Type::Named(variant.enum_name.clone()),
+                    })
+                } else {
+                    Err(format!("internal error: unknown variable '{name}'"))
+                }
             }
             Expr::ArrayLiteral(elements) => self.emit_array_literal(elements),
             Expr::StructLiteral { name, fields } => self.emit_struct_literal(name, fields),
@@ -356,6 +377,26 @@ impl<'a> FunctionEmitter<'a> {
             },
             Expr::Unary { op, expr } => self.emit_unary(op, expr),
         }
+    }
+
+    fn emit_sizeof(&mut self, ty: &Type) -> Result<Value, String> {
+        if *ty == Type::Void {
+            return Err("internal error: sizeof(void) is not supported".to_string());
+        }
+
+        let sizeof_ptr = self.fresh_temp("sizeof.ptr");
+        self.emit_assign(
+            &sizeof_ptr,
+            format!("getelementptr {}, ptr null, i64 1", self.llvm_type(ty)),
+        );
+
+        let sizeof = self.fresh_temp("sizeof");
+        self.emit_assign(&sizeof, format!("ptrtoint ptr {} to i64", sizeof_ptr));
+
+        Ok(Value {
+            repr: sizeof,
+            ty: Type::USize,
+        })
     }
 
     fn emit_struct_literal(
@@ -387,9 +428,9 @@ impl<'a> FunctionEmitter<'a> {
                 &next,
                 format!(
                     "insertvalue {} {}, {} {}, {}",
-                    llvm_type(&struct_ty),
+                    self.llvm_type(&struct_ty),
                     current,
-                    llvm_type(&value.ty),
+                    self.llvm_type(&value.ty),
                     value.repr,
                     index
                 ),
@@ -417,9 +458,9 @@ impl<'a> FunctionEmitter<'a> {
             &first_temp,
             format!(
                 "insertvalue {} {}, {} {}, 0",
-                llvm_type(&array_ty),
+                self.llvm_type(&array_ty),
                 current,
-                llvm_type(&first_value.ty),
+                self.llvm_type(&first_value.ty),
                 first_value.repr
             ),
         );
@@ -432,9 +473,9 @@ impl<'a> FunctionEmitter<'a> {
                 &next,
                 format!(
                     "insertvalue {} {}, {} {}, {}",
-                    llvm_type(&array_ty),
+                    self.llvm_type(&array_ty),
                     current,
-                    llvm_type(&value.ty),
+                    self.llvm_type(&value.ty),
                     value.repr,
                     index
                 ),
@@ -477,7 +518,7 @@ impl<'a> FunctionEmitter<'a> {
             &temp,
             format!(
                 "extractvalue {} {}, {}",
-                llvm_type(&base.ty),
+                self.llvm_type(&base.ty),
                 base.repr,
                 index
             ),
@@ -503,7 +544,7 @@ impl<'a> FunctionEmitter<'a> {
                     &element_ptr,
                     format!(
                         "getelementptr inbounds {}, ptr {}, i64 0, i64 {}",
-                        llvm_type(&base.ty),
+                        self.llvm_type(&base.ty),
                         spill_ptr,
                         index_i64
                     ),
@@ -512,7 +553,7 @@ impl<'a> FunctionEmitter<'a> {
                 let loaded = self.fresh_temp("elem");
                 self.emit_assign(
                     &loaded,
-                    format!("load {}, ptr {}", llvm_type(element_ty), element_ptr),
+                    format!("load {}, ptr {}", self.llvm_type(element_ty), element_ptr),
                 );
 
                 Ok(Value {
@@ -524,7 +565,7 @@ impl<'a> FunctionEmitter<'a> {
                 let data_ptr = self.fresh_temp("slice.ptr");
                 self.emit_assign(
                     &data_ptr,
-                    format!("extractvalue {} {}, 0", llvm_type(&base.ty), base.repr),
+                    format!("extractvalue {} {}, 0", self.llvm_type(&base.ty), base.repr),
                 );
 
                 let element_ptr = self.fresh_temp("elem.ptr");
@@ -532,7 +573,7 @@ impl<'a> FunctionEmitter<'a> {
                     &element_ptr,
                     format!(
                         "getelementptr inbounds {}, ptr {}, i64 {}",
-                        llvm_type(element_ty),
+                        self.llvm_type(element_ty),
                         data_ptr,
                         index_i64
                     ),
@@ -541,7 +582,7 @@ impl<'a> FunctionEmitter<'a> {
                 let loaded = self.fresh_temp("elem");
                 self.emit_assign(
                     &loaded,
-                    format!("load {}, ptr {}", llvm_type(element_ty), element_ptr),
+                    format!("load {}, ptr {}", self.llvm_type(element_ty), element_ptr),
                 );
 
                 Ok(Value {
@@ -555,7 +596,7 @@ impl<'a> FunctionEmitter<'a> {
                     &element_ptr,
                     format!(
                         "getelementptr inbounds {}, ptr {}, i64 {}",
-                        llvm_type(element_ty),
+                        self.llvm_type(element_ty),
                         base.repr,
                         index_i64
                     ),
@@ -564,7 +605,7 @@ impl<'a> FunctionEmitter<'a> {
                 let loaded = self.fresh_temp("elem");
                 self.emit_assign(
                     &loaded,
-                    format!("load {}, ptr {}", llvm_type(element_ty), element_ptr),
+                    format!("load {}, ptr {}", self.llvm_type(element_ty), element_ptr),
                 );
 
                 Ok(Value {
@@ -595,7 +636,7 @@ impl<'a> FunctionEmitter<'a> {
         let mut rendered_args = Vec::new();
         for (arg, ty) in args.iter().zip(sig.params.iter()) {
             let value = self.emit_expr(arg)?;
-            rendered_args.push(format!("{} {}", llvm_type(ty), value.repr));
+            rendered_args.push(format!("{} {}", self.llvm_type(ty), value.repr));
         }
 
         let callee = llvm_function_name(name);
@@ -613,7 +654,7 @@ impl<'a> FunctionEmitter<'a> {
                 &temp,
                 format!(
                     "call {} {}({})",
-                    llvm_type(&sig.ret_type),
+                    self.llvm_type(&sig.ret_type),
                     callee,
                     rendered_args
                 ),
@@ -643,7 +684,11 @@ impl<'a> FunctionEmitter<'a> {
                 let len = self.fresh_temp("slice.len");
                 self.emit_assign(
                     &len,
-                    format!("extractvalue {} {}, 1", llvm_type(&value.ty), value.repr),
+                    format!(
+                        "extractvalue {} {}, 1",
+                        self.llvm_type(&value.ty),
+                        value.repr
+                    ),
                 );
                 Ok(Value {
                     repr: len,
@@ -707,7 +752,7 @@ impl<'a> FunctionEmitter<'a> {
             &data_ptr,
             format!(
                 "getelementptr inbounds {}, ptr {}, i64 0, i64 0",
-                llvm_type(&array_ty),
+                self.llvm_type(&array_ty),
                 array_ptr
             ),
         );
@@ -718,7 +763,7 @@ impl<'a> FunctionEmitter<'a> {
             &with_ptr,
             format!(
                 "insertvalue {} poison, ptr {}, 0",
-                llvm_type(&slice_ty),
+                self.llvm_type(&slice_ty),
                 data_ptr
             ),
         );
@@ -728,7 +773,7 @@ impl<'a> FunctionEmitter<'a> {
             &with_len,
             format!(
                 "insertvalue {} {}, i64 {}, 1",
-                llvm_type(&slice_ty),
+                self.llvm_type(&slice_ty),
                 with_ptr,
                 len
             ),
@@ -814,7 +859,7 @@ impl<'a> FunctionEmitter<'a> {
         let right = self.emit_expr(right)?;
         let temp = self.fresh_temp("bin");
         let operand_ty = left.ty.clone();
-        let llvm_operand_ty = llvm_type(&operand_ty);
+        let llvm_operand_ty = self.llvm_type(&operand_ty);
 
         let instruction = match op {
             BinOp::Add => format!("add {} {}, {}", llvm_operand_ty, left.repr, right.repr),
@@ -830,13 +875,13 @@ impl<'a> FunctionEmitter<'a> {
             }
             BinOp::Eq => format!(
                 "icmp eq {} {}, {}",
-                llvm_type(&left.ty),
+                self.llvm_type(&left.ty),
                 left.repr,
                 right.repr
             ),
             BinOp::Ne => format!(
                 "icmp ne {} {}, {}",
-                llvm_type(&left.ty),
+                self.llvm_type(&left.ty),
                 left.repr,
                 right.repr
             ),
@@ -884,7 +929,7 @@ impl<'a> FunctionEmitter<'a> {
                 let temp = self.fresh_temp("unary");
                 self.emit_assign(
                     &temp,
-                    format!("sub {} 0, {}", llvm_type(&expr.ty), expr.repr),
+                    format!("sub {} 0, {}", self.llvm_type(&expr.ty), expr.repr),
                 );
                 Ok(Value {
                     repr: temp,
@@ -916,7 +961,7 @@ impl<'a> FunctionEmitter<'a> {
                 let temp = self.fresh_temp("deref");
                 self.emit_assign(
                     &temp,
-                    format!("load {}, ptr {}", llvm_type(inner_ty), expr.repr),
+                    format!("load {}, ptr {}", self.llvm_type(inner_ty), expr.repr),
                 );
                 Ok(Value {
                     repr: temp,
@@ -969,13 +1014,13 @@ impl<'a> FunctionEmitter<'a> {
         let Some(from_bits) = integer_bit_width(&value.ty) else {
             return Err(format!(
                 "internal error: unsupported cast from {}",
-                llvm_type(&value.ty)
+                self.llvm_type(&value.ty)
             ));
         };
         let Some(to_bits) = integer_bit_width(target_ty) else {
             return Err(format!(
                 "internal error: unsupported cast to {}",
-                llvm_type(target_ty)
+                self.llvm_type(target_ty)
             ));
         };
 
@@ -987,7 +1032,7 @@ impl<'a> FunctionEmitter<'a> {
             let temp = self.fresh_temp("cast");
             self.emit_assign(
                 &temp,
-                format!("icmp ne {} {}, 0", llvm_type(&value.ty), value.repr),
+                format!("icmp ne {} {}, 0", self.llvm_type(&value.ty), value.repr),
             );
             return Ok(Value {
                 repr: temp,
@@ -999,7 +1044,7 @@ impl<'a> FunctionEmitter<'a> {
             let temp = self.fresh_temp("cast");
             self.emit_assign(
                 &temp,
-                format!("zext i1 {} to {}", value.repr, llvm_type(target_ty)),
+                format!("zext i1 {} to {}", value.repr, self.llvm_type(target_ty)),
             );
             return Ok(Value {
                 repr: temp,
@@ -1024,16 +1069,16 @@ impl<'a> FunctionEmitter<'a> {
             format!(
                 "{} {} {} to {}",
                 opcode,
-                llvm_type(&value.ty),
+                self.llvm_type(&value.ty),
                 value.repr,
-                llvm_type(target_ty)
+                self.llvm_type(target_ty)
             )
         } else {
             format!(
                 "trunc {} {} to {}",
-                llvm_type(&value.ty),
+                self.llvm_type(&value.ty),
                 value.repr,
-                llvm_type(target_ty)
+                self.llvm_type(target_ty)
             )
         };
         self.emit_assign(&temp, instruction);
@@ -1046,7 +1091,7 @@ impl<'a> FunctionEmitter<'a> {
     fn emit_store(&mut self, value: &Value, ptr: &str) {
         self.emit_line(format!(
             "store {} {}, ptr {}",
-            llvm_type(&value.ty),
+            self.llvm_type(&value.ty),
             value.repr,
             ptr
         ));
@@ -1087,9 +1132,12 @@ impl<'a> FunctionEmitter<'a> {
             Type::Str => self.emit_terminator("ret ptr null".to_string()),
             Type::Ptr(_) => self.emit_terminator("ret ptr null".to_string()),
             Type::Void => self.emit_terminator("ret void".to_string()),
+            Type::Named(name) if self.enum_names.contains(name) => {
+                self.emit_terminator("ret i32 0".to_string())
+            }
             Type::Named(_) | Type::Array(_, _) | Type::Slice(_) => self.emit_terminator(format!(
                 "ret {} zeroinitializer",
-                llvm_type(&self.function.ret_type)
+                self.llvm_type(&self.function.ret_type)
             )),
         }
     }
@@ -1136,7 +1184,7 @@ impl<'a> FunctionEmitter<'a> {
                     &field_ptr,
                     format!(
                         "getelementptr inbounds {}, ptr {}, i32 0, i32 {}",
-                        llvm_type(&base.ty),
+                        self.llvm_type(&base.ty),
                         base.ptr,
                         index
                     ),
@@ -1169,7 +1217,7 @@ impl<'a> FunctionEmitter<'a> {
                             &element_ptr,
                             format!(
                                 "getelementptr inbounds {}, ptr {}, i64 0, i64 {}",
-                                llvm_type(&base_value.ty),
+                                self.llvm_type(&base_value.ty),
                                 array_ptr,
                                 index_i64
                             ),
@@ -1186,7 +1234,7 @@ impl<'a> FunctionEmitter<'a> {
                             &data_ptr,
                             format!(
                                 "extractvalue {} {}, 0",
-                                llvm_type(&base_value.ty),
+                                self.llvm_type(&base_value.ty),
                                 base_value.repr
                             ),
                         );
@@ -1196,7 +1244,7 @@ impl<'a> FunctionEmitter<'a> {
                             &element_ptr,
                             format!(
                                 "getelementptr inbounds {}, ptr {}, i64 {}",
-                                llvm_type(element_ty),
+                                self.llvm_type(element_ty),
                                 data_ptr,
                                 index_i64
                             ),
@@ -1213,7 +1261,7 @@ impl<'a> FunctionEmitter<'a> {
                             &element_ptr,
                             format!(
                                 "getelementptr inbounds {}, ptr {}, i64 {}",
-                                llvm_type(element_ty),
+                                self.llvm_type(element_ty),
                                 base_value.repr,
                                 index_i64
                             ),
@@ -1286,7 +1334,7 @@ impl<'a> FunctionEmitter<'a> {
         let slot = format!("%{}.addr.{}", name, self.slot_counter);
         self.slot_counter += 1;
         self.entry_allocas
-            .push(format!("{} = alloca {}", slot, llvm_type(ty)));
+            .push(format!("{} = alloca {}", slot, self.llvm_type(ty)));
         slot
     }
 

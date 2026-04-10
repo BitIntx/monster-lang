@@ -413,3 +413,57 @@ fn emits_main_with_argc_and_argv() {
     assert!(ir.contains("getelementptr inbounds ptr, ptr %"));
     assert!(ir.contains("call void @__monster_builtin_print_ln_str(ptr %"));
 }
+
+#[test]
+fn emits_c_like_enum_values_and_comparison() {
+    let ir = emit_source(
+        r#"
+        enum Color {
+            Red,
+            Green,
+            Blue,
+        }
+
+        fn is_red(color: Color) -> bool {
+            return color == Red;
+        }
+
+        fn main() -> i32 {
+            let color: Color = Green;
+
+            if is_red(color) {
+                return 1;
+            }
+
+            return 0;
+        }
+        "#,
+    );
+
+    assert!(ir.contains("define i1 @is_red(i32 %color) {"));
+    assert!(ir.contains("store i32 1, ptr %color.addr."));
+    assert!(ir.contains("icmp eq i32 %"));
+    assert!(!ir.contains("%struct.Color = type"));
+}
+
+#[test]
+fn emits_sizeof_for_scalars_and_structs() {
+    let ir = emit_source(
+        r#"
+        struct Pair {
+            left: i32,
+            right: i32,
+        }
+
+        fn main() -> i32 {
+            let a: usize = sizeof(i32);
+            let b: usize = sizeof(Pair);
+            return (a + b) as i32;
+        }
+        "#,
+    );
+
+    assert!(ir.contains("getelementptr i32, ptr null, i64 1"));
+    assert!(ir.contains("getelementptr %struct.Pair, ptr null, i64 1"));
+    assert!(ir.contains("ptrtoint ptr %sizeof.ptr."));
+}

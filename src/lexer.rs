@@ -90,6 +90,8 @@ impl Lexer {
             "import" => TokenKind::Import,
             "fn" => TokenKind::Fn,
             "struct" => TokenKind::Struct,
+            "enum" => TokenKind::Enum,
+            "sizeof" => TokenKind::SizeOf,
             "let" => TokenKind::Let,
             "mut" => TokenKind::Mut,
             "as" => TokenKind::As,

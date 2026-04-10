@@ -4,6 +4,8 @@ pub enum TokenKind {
     Import,
     Fn,
     Struct,
+    Enum,
+    SizeOf,
     Let,
     Mut,
     As,

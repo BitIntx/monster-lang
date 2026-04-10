@@ -24,8 +24,18 @@ struct StructInfo {
     fields: Vec<(String, Type)>,
 }
 
+#[derive(Clone)]
+struct EnumInfo;
+
+#[derive(Clone)]
+struct EnumVariantInfo {
+    enum_name: String,
+}
+
 struct Analyzer {
     structs: HashMap<String, StructInfo>,
+    enums: HashMap<String, EnumInfo>,
+    enum_variants: HashMap<String, EnumVariantInfo>,
     functions: HashMap<String, FunctionSig>,
     scopes: Vec<HashMap<String, VarInfo>>,
     current_return_type: Option<Type>,
@@ -36,6 +46,8 @@ impl Analyzer {
     fn new() -> Self {
         let mut analyzer = Self {
             structs: HashMap::new(),
+            enums: HashMap::new(),
+            enum_variants: HashMap::new(),
             functions: HashMap::new(),
             scopes: Vec::new(),
             current_return_type: None,
@@ -46,7 +58,20 @@ impl Analyzer {
     }
 
     fn analyze_program(&mut self, program: &Program) -> Result<(), String> {
+        for enum_def in &program.enums {
+            if self.enums.contains_key(&enum_def.name) || self.structs.contains_key(&enum_def.name)
+            {
+                return Err(format!("duplicate type '{}'", enum_def.name));
+            }
+
+            self.enums.insert(enum_def.name.clone(), EnumInfo);
+        }
+
         for struct_def in &program.structs {
+            if self.enums.contains_key(&struct_def.name) {
+                return Err(format!("duplicate type '{}'", struct_def.name));
+            }
+
             if self
                 .structs
                 .insert(struct_def.name.clone(), StructInfo { fields: Vec::new() })
@@ -54,6 +79,40 @@ impl Analyzer {
             {
                 return Err(format!("duplicate struct '{}'", struct_def.name));
             }
+        }
+
+        for enum_def in &program.enums {
+            if enum_def.variants.is_empty() {
+                return Err(format!(
+                    "enum '{}' must have at least one variant",
+                    enum_def.name
+                ));
+            }
+
+            let mut seen_variants = HashMap::new();
+            for variant in &enum_def.variants {
+                if seen_variants.insert(variant.clone(), ()).is_some() {
+                    return Err(format!(
+                        "duplicate variant '{}' in enum '{}'",
+                        variant, enum_def.name
+                    ));
+                }
+
+                if self
+                    .enum_variants
+                    .insert(
+                        variant.clone(),
+                        EnumVariantInfo {
+                            enum_name: enum_def.name.clone(),
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(format!("duplicate enum variant '{}'", variant));
+                }
+            }
+
+            self.enums.insert(enum_def.name.clone(), EnumInfo);
         }
 
         for struct_def in &program.structs {
@@ -116,6 +175,13 @@ impl Analyzer {
 
         for stmt in body {
             self.analyze_stmt(stmt)?;
+        }
+
+        if func.ret_type != Type::Void && !block_guarantees_return(body) {
+            return Err(format!(
+                "function '{}' may not return a value on all paths",
+                func.name
+            ));
         }
 
         self.exit_scope();
@@ -317,6 +383,10 @@ impl Analyzer {
     fn analyze_expr(&mut self, expr: &Expr) -> Result<Type, String> {
         match expr {
             Expr::Int(_) => Ok(Type::I32),
+            Expr::SizeOf(ty) => {
+                self.ensure_value_type(ty, "sizeof operand")?;
+                Ok(Type::USize)
+            }
             Expr::Cast { expr, ty } => {
                 self.ensure_value_type(ty, "cast target")?;
                 let expr_ty = self.analyze_expr(expr)?;
@@ -333,10 +403,15 @@ impl Analyzer {
             }
             Expr::Bool(_) => Ok(Type::Bool),
             Expr::Str(_) => Ok(Type::Str),
-            Expr::Var(name) => self
-                .lookup_var(name)
-                .map(|var| var.ty.clone())
-                .ok_or_else(|| format!("use of undeclared variable '{name}'")),
+            Expr::Var(name) => {
+                if let Some(var) = self.lookup_var(name) {
+                    Ok(var.ty.clone())
+                } else if let Some(variant) = self.enum_variants.get(name) {
+                    Ok(Type::Named(variant.enum_name.clone()))
+                } else {
+                    Err(format!("use of undeclared variable '{name}'"))
+                }
+            }
             Expr::ArrayLiteral(elements) => {
                 let Some(first) = elements.first() else {
                     return Err("array literals cannot be empty yet".to_string());
@@ -482,7 +557,9 @@ impl Analyzer {
                         Ok(left_ty)
                     }
                     BinOp::Eq | BinOp::Ne => {
-                        if matches!(left_ty, Type::Named(_) | Type::Array(_, _) | Type::Slice(_)) {
+                        if matches!(left_ty, Type::Array(_, _) | Type::Slice(_))
+                            || self.is_struct_type(&left_ty)
+                        {
                             return Err(
                                 "aggregate values cannot be compared with == or !=".to_string()
                             );
@@ -631,7 +708,7 @@ impl Analyzer {
             Type::Slice(element_ty) => self.ensure_value_type(element_ty, "slice element"),
             Type::Ptr(element_ty) => self.ensure_known_type(element_ty),
             Type::Named(name) => {
-                if self.structs.contains_key(name) {
+                if self.structs.contains_key(name) || self.enums.contains_key(name) {
                     Ok(())
                 } else {
                     Err(format!("unknown type '{}'", name))
@@ -757,6 +834,10 @@ impl Analyzer {
             )),
         }
     }
+
+    fn is_struct_type(&self, ty: &Type) -> bool {
+        matches!(ty, Type::Named(name) if self.structs.contains_key(name))
+    }
 }
 
 fn type_name(ty: &Type) -> String {
@@ -816,6 +897,41 @@ fn can_cast(from: &Type, to: &Type) -> bool {
     }
 
     false
+}
+
+fn block_guarantees_return(stmts: &[Stmt]) -> bool {
+    for stmt in stmts {
+        if stmt_guarantees_return(stmt) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn stmt_guarantees_return(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Return(_) => true,
+        Stmt::If {
+            then_body,
+            else_body: Some(else_body),
+            ..
+        } => block_guarantees_return(then_body) && block_guarantees_return(else_body),
+        Stmt::If {
+            else_body: None, ..
+        } => false,
+        // Loops are treated conservatively: even if the loop body returns,
+        // the loop may not execute, or may break/continue instead.
+        Stmt::While { .. } => false,
+        Stmt::Let { .. }
+        | Stmt::Assign { .. }
+        | Stmt::AssignIndex { .. }
+        | Stmt::AssignField { .. }
+        | Stmt::AssignDeref { .. }
+        | Stmt::Expr(_)
+        | Stmt::Break
+        | Stmt::Continue => false,
+    }
 }
 
 #[cfg(test)]
@@ -1062,6 +1178,23 @@ mod tests {
     }
 
     #[test]
+    fn accepts_all_paths_return_through_if_else() {
+        let result = analyze_source(
+            r#"
+            fn sign(x: i32) -> i32 {
+                if x < 0 {
+                    return -1;
+                } else {
+                    return 1;
+                }
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn accepts_main_with_argc_and_argv() {
         let result = analyze_source(
             r#"
@@ -1074,6 +1207,40 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_non_void_function_without_return() {
+        let result = analyze_source(
+            r#"
+            fn main() -> i32 {
+                let x: i32 = 1;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("may not return a value on all paths")
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_return_path_in_if_without_else() {
+        let result = analyze_source(
+            r#"
+            fn main(flag: bool) -> i32 {
+                if flag {
+                    return 1;
+                }
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("may not return a value on all paths")
+        ));
     }
 
     #[test]
@@ -1278,6 +1445,93 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accepts_c_like_enums() {
+        let result = analyze_source(
+            r#"
+            enum Color {
+                Red,
+                Green,
+                Blue,
+            }
+
+            fn is_red(color: Color) -> bool {
+                return color == Red;
+            }
+
+            fn main() -> i32 {
+                let color: Color = Green;
+
+                if is_red(color) {
+                    return 1;
+                }
+
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accepts_sizeof_on_scalars_and_structs() {
+        let result = analyze_source(
+            r#"
+            struct Pair {
+                left: i32,
+                right: i32,
+            }
+
+            fn main() -> i32 {
+                let a: usize = sizeof(i32);
+                let b: usize = sizeof(Pair);
+                return (a + b) as i32;
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_sizeof_void() {
+        let result = analyze_source(
+            r#"
+            fn main() -> i32 {
+                let size: usize = sizeof(void);
+                return size as i32;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("sizeof operand cannot have type void")
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_enum_variants() {
+        let result = analyze_source(
+            r#"
+            enum Color {
+                Red,
+                Red,
+            }
+
+            fn main() -> i32 {
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("duplicate variant 'Red'")
+        ));
     }
 
     #[test]

@@ -250,10 +250,12 @@ fn load_program_recursive(
         })?;
 
         let imported = load_program_recursive(&canonical_import, loaded, active)?;
+        merged.enums.extend(imported.enums);
         merged.structs.extend(imported.structs);
         merged.functions.extend(imported.functions);
     }
 
+    merged.enums.extend(parsed.enums);
     merged.structs.extend(parsed.structs);
     merged.functions.extend(parsed.functions);
 
@@ -277,6 +279,7 @@ fn parse_program_from_file(path: &Path) -> Result<ast::Program, String> {
 fn empty_program() -> ast::Program {
     ast::Program {
         imports: Vec::new(),
+        enums: Vec::new(),
         structs: Vec::new(),
         functions: Vec::new(),
     }

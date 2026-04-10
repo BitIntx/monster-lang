@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Expr, Program, Stmt, Type};
 
@@ -27,8 +27,16 @@ pub(super) struct StringLiteralData {
     len: usize,
 }
 
+#[derive(Clone)]
+pub(super) struct EnumVariantInfo {
+    pub enum_name: String,
+    pub discriminant: i32,
+}
+
 pub fn emit_program(program: &Program) -> Result<String, String> {
     let struct_layouts = collect_struct_layouts(program);
+    let enum_names = collect_enum_names(program);
+    let enum_variants = collect_enum_variants(program);
     let function_sigs = collect_function_sigs(program);
     let string_literals = collect_string_literals(program);
 
@@ -36,16 +44,22 @@ pub fn emit_program(program: &Program) -> Result<String, String> {
     out.push_str("; Monster LLVM IR backend\n");
     out.push_str(&format!("target triple = \"{}\"\n\n", host_target_triple()));
     out.push_str(&emit_runtime_prelude());
-    out.push_str(&emit_struct_definitions(program));
+    out.push_str(&emit_struct_definitions(program, &enum_names));
     out.push_str(&emit_string_literal_globals(&string_literals));
-    out.push_str(&emit_extern_declarations(program));
+    out.push_str(&emit_extern_declarations(program, &enum_names));
 
     for function in &program.functions {
         if function.is_extern {
             continue;
         }
-        let mut emitter =
-            FunctionEmitter::new(function, &function_sigs, &struct_layouts, &string_literals);
+        let mut emitter = FunctionEmitter::new(
+            function,
+            &function_sigs,
+            &struct_layouts,
+            &enum_names,
+            &enum_variants,
+            &string_literals,
+        );
         out.push_str(&emitter.emit()?);
         out.push('\n');
     }
@@ -66,6 +80,32 @@ fn collect_struct_layouts(program: &Program) -> HashMap<String, StructLayout> {
     }
 
     layouts
+}
+
+fn collect_enum_names(program: &Program) -> HashSet<String> {
+    program
+        .enums
+        .iter()
+        .map(|enum_def| enum_def.name.clone())
+        .collect()
+}
+
+fn collect_enum_variants(program: &Program) -> HashMap<String, EnumVariantInfo> {
+    let mut variants = HashMap::new();
+
+    for enum_def in &program.enums {
+        for (index, variant) in enum_def.variants.iter().enumerate() {
+            variants.insert(
+                variant.clone(),
+                EnumVariantInfo {
+                    enum_name: enum_def.name.clone(),
+                    discriminant: index as i32,
+                },
+            );
+        }
+    }
+
+    variants
 }
 
 fn collect_function_sigs(program: &Program) -> HashMap<String, FunctionSig> {
@@ -97,7 +137,7 @@ fn collect_string_literals(program: &Program) -> HashMap<String, StringLiteralDa
     string_literals
 }
 
-fn emit_extern_declarations(program: &Program) -> String {
+fn emit_extern_declarations(program: &Program, enum_names: &HashSet<String>) -> String {
     let mut out = String::new();
 
     for function in &program.functions {
@@ -108,13 +148,13 @@ fn emit_extern_declarations(program: &Program) -> String {
         let params = function
             .params
             .iter()
-            .map(|(_, ty)| llvm_type(ty))
+            .map(|(_, ty)| llvm_type(ty, enum_names))
             .collect::<Vec<_>>()
             .join(", ");
 
         out.push_str(&format!(
             "declare {} @{}({})\n",
-            llvm_type(&function.ret_type),
+            llvm_type(&function.ret_type, enum_names),
             function.name,
             params
         ));
@@ -127,7 +167,7 @@ fn emit_extern_declarations(program: &Program) -> String {
     out
 }
 
-fn emit_struct_definitions(program: &Program) -> String {
+fn emit_struct_definitions(program: &Program, enum_names: &HashSet<String>) -> String {
     if program.structs.is_empty() {
         return String::new();
     }
@@ -137,7 +177,7 @@ fn emit_struct_definitions(program: &Program) -> String {
         let fields = struct_def
             .fields
             .iter()
-            .map(|(_, ty)| llvm_type(ty))
+            .map(|(_, ty)| llvm_type(ty, enum_names))
             .collect::<Vec<_>>()
             .join(", ");
         out.push_str(&format!(
@@ -246,7 +286,7 @@ fn collect_strings_from_expr(
         }
         Expr::Cast { expr, .. } => collect_strings_from_expr(expr, string_literals, next_index),
         Expr::Unary { expr, .. } => collect_strings_from_expr(expr, string_literals, next_index),
-        Expr::Int(_) | Expr::Bool(_) | Expr::Var(_) => {}
+        Expr::Int(_) | Expr::Bool(_) | Expr::Var(_) | Expr::SizeOf(_) => {}
     }
 }
 

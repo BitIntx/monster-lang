@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::{BinOp, Expr, Function, Program, Stmt, StructDef, Type, UnaryOp};
+use crate::ast::{BinOp, EnumDef, Expr, Function, Program, Stmt, StructDef, Type, UnaryOp};
 use crate::token::{Token, TokenKind};
 
 pub struct Parser {
@@ -127,12 +127,15 @@ impl Parser {
 
     pub fn parse_program(&mut self) -> Result<Program, String> {
         let mut imports = Vec::new();
+        let mut enums = Vec::new();
         let mut structs = Vec::new();
         let mut functions = Vec::new();
 
         while !self.at(TokenKind::Eof) {
             if self.at(TokenKind::Import) {
                 imports.push(self.parse_import()?);
+            } else if self.at(TokenKind::Enum) {
+                enums.push(self.parse_enum()?);
             } else if self.at(TokenKind::Struct) {
                 let struct_def = self.parse_struct()?;
                 self.known_structs.insert(struct_def.name.clone());
@@ -144,6 +147,7 @@ impl Parser {
 
         Ok(Program {
             imports,
+            enums,
             structs,
             functions,
         })
@@ -178,6 +182,27 @@ impl Parser {
         self.expect(TokenKind::RBrace)?;
 
         Ok(StructDef { name, fields })
+    }
+
+    fn parse_enum(&mut self) -> Result<EnumDef, String> {
+        self.expect(TokenKind::Enum)?;
+        let name = self.expect_ident()?.lexeme;
+        self.expect(TokenKind::LBrace)?;
+
+        let mut variants = Vec::new();
+        while !self.at(TokenKind::RBrace) {
+            variants.push(self.expect_ident()?.lexeme);
+
+            if self.at(TokenKind::Comma) {
+                self.expect(TokenKind::Comma)?;
+            } else {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(EnumDef { name, variants })
     }
 
     fn parse_function(&mut self) -> Result<Function, String> {
@@ -758,6 +783,7 @@ impl Parser {
         let token = self.current().clone();
 
         match token.kind {
+            TokenKind::SizeOf => self.parse_sizeof_expr(),
             TokenKind::Int => {
                 self.advance();
                 let value = token.lexeme.parse::<i32>().map_err(|e| {
@@ -796,6 +822,14 @@ impl Parser {
                 token.kind, token.line, token.column
             )),
         }
+    }
+
+    fn parse_sizeof_expr(&mut self) -> Result<Expr, String> {
+        self.expect(TokenKind::SizeOf)?;
+        self.expect(TokenKind::LParen)?;
+        let ty = self.parse_type()?;
+        self.expect(TokenKind::RParen)?;
+        Ok(Expr::SizeOf(ty))
     }
 
     fn parse_array_literal(&mut self) -> Result<Expr, String> {
@@ -845,6 +879,30 @@ mod tests {
         );
 
         assert_eq!(program.imports, vec!["std/io.mnst".to_string()]);
+    }
+
+    #[test]
+    fn parses_enum_definition() {
+        let program = parse_source(
+            r#"
+            enum Color {
+                Red,
+                Green,
+                Blue,
+            }
+
+            fn main() -> i32 {
+                return 0;
+            }
+            "#,
+        );
+
+        assert_eq!(program.enums.len(), 1);
+        assert_eq!(program.enums[0].name, "Color");
+        assert_eq!(
+            program.enums[0].variants,
+            vec!["Red".to_string(), "Green".to_string(), "Blue".to_string()]
+        );
     }
 
     #[test]
@@ -1041,6 +1099,37 @@ mod tests {
         };
 
         assert!(matches!(args.as_slice(), [Expr::Str(value)] if value == "Hello, World!"));
+    }
+
+    #[test]
+    fn parses_sizeof_expression() {
+        let program = parse_source(
+            r#"
+            struct Pair {
+                left: i32,
+                right: i32,
+            }
+
+            fn main() -> i32 {
+                let size: usize = sizeof(Pair);
+                return size as i32;
+            }
+            "#,
+        );
+
+        let body = program.functions[0]
+            .body
+            .as_ref()
+            .expect("expected function body");
+
+        assert!(matches!(
+            body[0],
+            Stmt::Let {
+                ty: Type::USize,
+                value: Expr::SizeOf(Type::Named(ref name)),
+                ..
+            } if name == "Pair"
+        ));
     }
 
     #[test]

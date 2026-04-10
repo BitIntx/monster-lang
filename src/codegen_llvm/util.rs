@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use crate::ast::Type;
 
-pub(super) fn llvm_type(ty: &Type) -> String {
+pub(super) fn llvm_type(ty: &Type, enum_names: &HashSet<String>) -> String {
     match ty {
         Type::I32 => "i32".to_string(),
         Type::U8 => "i8".to_string(),
@@ -8,8 +10,16 @@ pub(super) fn llvm_type(ty: &Type) -> String {
         Type::Bool => "i1".to_string(),
         Type::Str => "ptr".to_string(),
         Type::Void => "void".to_string(),
-        Type::Named(name) => format!("%struct.{name}"),
-        Type::Array(element_ty, len) => format!("[{} x {}]", len, llvm_type(element_ty)),
+        Type::Named(name) => {
+            if enum_names.contains(name) {
+                "i32".to_string()
+            } else {
+                format!("%struct.{name}")
+            }
+        }
+        Type::Array(element_ty, len) => {
+            format!("[{} x {}]", len, llvm_type(element_ty, enum_names))
+        }
         Type::Slice(_) => "{ ptr, i64 }".to_string(),
         Type::Ptr(_) => "ptr".to_string(),
     }

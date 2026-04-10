@@ -42,6 +42,7 @@ pub enum Expr {
     Bool(bool),
     Str(String),
     Var(String),
+    SizeOf(Type),
     ArrayLiteral(Vec<Expr>),
     StructLiteral {
         name: String,
@@ -122,6 +123,12 @@ pub struct StructDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub name: String,
     pub params: Vec<(String, Type)>,
@@ -133,6 +140,7 @@ pub struct Function {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     pub imports: Vec<String>,
+    pub enums: Vec<EnumDef>,
     pub structs: Vec<StructDef>,
     pub functions: Vec<Function>,
 }

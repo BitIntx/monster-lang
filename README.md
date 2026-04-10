@@ -89,6 +89,7 @@ mst run exam.mnst
 mst run --debug exam.mnst
 mst run examples/argv.mnst -- hello
 mst run examples/file_io.mnst -- exam.mnst
+mst run examples/enum.mnst
 mst clean
 mst --help
 mst --version
@@ -121,7 +122,7 @@ Implemented today:
 - Lexer with source position tracking
 - Parser with operator precedence
 - AST for functions, statements, expressions, and types
-- Minimal semantic analysis
+- Semantic analysis with type checking, mutability checks, and return-path validation
 - LLVM IR code generation
 - Builtin I/O via LLVM runtime helpers
 - CLI commands for `check`, `emit-llvm`, `build`, `run`, and `clean`
@@ -136,6 +137,7 @@ Supported language features:
 - `return`
 - `return;`
 - `main(argc: i32, argv: **u8)` entry arguments
+- `enum Name { Variant, ... }`
 - `if` / `else`
 - `while`
 - `break`
@@ -159,6 +161,7 @@ Supported language features:
 - raw pointers: `*T`, `&expr`, `*ptr`, `ptr[i]`
 - arithmetic operators: `+ - * /`
 - comparison operators: `== != < <= > >=`
+- `sizeof(T)`
 - string literals
 - builtins: `print_i32`, `print_bool`, `print_str`, `print_ln_i32`, `print_ln_bool`, `print_ln_str`, `read_i32`, `len`
 - file I/O builtins: `read_file(path, &len)` and `write_file(path, data, len)`
@@ -190,6 +193,34 @@ fn main() -> i32 {
     let mut values: [i32; 3] = [pair.left, abs(-7), 30];
     values[1] = len(values);
     return values[0] + values[1];
+}
+```
+
+Monster now also has payload-free enums with C-like variants:
+
+```mnst
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn is_red(color: Color) -> bool {
+    return color == Red;
+}
+```
+
+It also supports `sizeof(T)` as a `usize` expression:
+
+```mnst
+struct Pair {
+    left: i32,
+    right: i32,
+}
+
+fn main() -> i32 {
+    let bytes: usize = sizeof(Pair);
+    return bytes as i32;
 }
 ```
 
@@ -292,6 +323,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 
 - [`exam.mnst`](./exam.mnst): a Hello, World! starting point with comments summarizing the rest of the current language surface
 - [`examples/argv.mnst`](./examples/argv.mnst): `main(argc, argv)` plus forwarded CLI arguments
+- [`examples/enum.mnst`](./examples/enum.mnst): payload-free enums and enum comparison
 - [`examples/file_io.mnst`](./examples/file_io.mnst): file reading and writing with `read_file` / `write_file`
 - [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst): a manual growable vector built with raw pointers and libc allocation
 - [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll): the raw LLVM IR generated from the growable `VecI32` example
@@ -302,10 +334,11 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 
 Near-term goals:
 
-- file I/O and stronger libc interop
-- CLI arguments
+- payload-carrying enums / tagged unions
+- stronger module and import structure
+- more complete libc and memory utilities
 - growable vectors beyond the current manual `VecI32` pattern
-- more flexible aggregate access
+- `sizeof`-driven allocation patterns for self-hosting data structures
 - better diagnostics with source snippets
 - stronger semantic analysis and type checking
 
