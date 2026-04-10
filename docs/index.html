@@ -22,19 +22,20 @@
         </nav>
       </header>
 
-      <main>
-        <section class="page-header">
-          <span class="eyebrow">Monster documentation</span>
-          <h1>Reference and guides for the Monster compiler and language.</h1>
-          <p>
-            Monster is an experimental low-level, ahead-of-time systems language. These docs are meant
-            to stay close to the implementation: straightforward pages, feature lists, and runnable examples.
-          </p>
-        </section>
+      <main class="layout">
+        <div>
+          <section class="page-header">
+            <span class="eyebrow">Monster documentation</span>
+            <h1>Reference and guides for the Monster compiler and language.</h1>
+            <p>
+              Monster is an experimental low-level, ahead-of-time systems language. These docs are meant
+              to stay close to the implementation: straightforward pages, feature lists, and runnable examples.
+            </p>
+          </section>
 
-        <section class="section">
-          <h2>Pipeline</h2>
-          <pre><code>.mnst source
+          <section class="section" id="pipeline">
+            <h2>Pipeline</h2>
+            <pre><code>.mnst source
   -> lexer
   -> parser
   -> AST
@@ -43,58 +44,79 @@
   -> opt-18 (-O2)
   -> clang-18
   -> native binary</code></pre>
-          <ul>
-            <li>Compiler executable: <code>mst</code></li>
-            <li>Source extension: <code>.mnst</code></li>
-            <li>Docs site: suitable for GitHub Pages and editor help links</li>
-          </ul>
-        </section>
+            <ul>
+              <li>Compiler executable: <code>mst</code></li>
+              <li>Source extension: <code>.mnst</code></li>
+              <li>Docs site: suitable for GitHub Pages and editor help links</li>
+            </ul>
+          </section>
 
-        <section class="section">
-          <h2>Start Here</h2>
-          <div class="doc-grid" aria-label="Guides">
-          <article class="card">
-            <h3><a href="./install.html">Install</a></h3>
-            <p>Release installer, source install, supported platforms, and update workflow.</p>
-          </article>
-          <article class="card">
-            <h3><a href="./language.html">Language</a></h3>
-            <p>Core syntax, types, control flow, enums, pointers, imports, and builtins.</p>
-          </article>
-          <article class="card">
-            <h3><a href="./cli.html">CLI</a></h3>
-            <p><code>check</code>, <code>emit-llvm</code>, <code>build</code>, <code>run</code>, and debug builds.</p>
-          </article>
-          <article class="card">
-            <h3><a href="./examples.html">Examples</a></h3>
-            <p>Working samples for argv, file I/O, module aliases, enums, match, and byte utilities.</p>
-          </article>
-          </div>
-        </section>
+          <section class="section" id="guides">
+            <h2>Guides</h2>
+            <div class="doc-grid" aria-label="Guides">
+            <article class="card">
+              <h3><a href="./install.html">Install</a></h3>
+              <p>Release installer, source install, supported platforms, and update workflow.</p>
+            </article>
+            <article class="card">
+              <h3><a href="./language.html">Language</a></h3>
+              <p>Core syntax, types, control flow, enums, pointers, imports, and builtins.</p>
+            </article>
+            <article class="card">
+              <h3><a href="./cli.html">CLI</a></h3>
+              <p><code>check</code>, <code>emit-llvm</code>, <code>build</code>, <code>run</code>, and debug builds.</p>
+            </article>
+            <article class="card">
+              <h3><a href="./examples.html">Examples</a></h3>
+              <p>Working samples for argv, file I/O, module aliases, enums, match, and byte utilities.</p>
+            </article>
+            </div>
+          </section>
 
-        <section class="section">
-          <h2>Current Feature Areas</h2>
-          <ul>
-            <li>Core syntax: <code>fn</code>, <code>extern fn</code>, <code>let</code>, <code>let mut</code>, <code>if</code>, <code>while</code>, <code>break</code>, <code>continue</code>, <code>return</code></li>
-            <li>Types: <code>i32</code>, <code>u8</code>, <code>usize</code>, <code>bool</code>, <code>str</code>, <code>void</code></li>
-            <li>Data structures: arrays, slices, structs, enums, payload enums, pointers</li>
-            <li>Utilities: <code>sizeof(T)</code>, casts with <code>as</code>, <code>argc/argv</code>, file I/O, string and byte helpers</li>
-            <li>Tooling: LLVM IR emission, optimized builds, debug builds, static docs, and a VS Code extension</li>
-          </ul>
-        </section>
+          <section class="section" id="features">
+            <h2>Current Feature Areas</h2>
+            <ul>
+              <li>Core syntax: <code>fn</code>, <code>extern fn</code>, <code>let</code>, <code>let mut</code>, <code>if</code>, <code>while</code>, <code>break</code>, <code>continue</code>, <code>return</code></li>
+              <li>Types: <code>i32</code>, <code>u8</code>, <code>usize</code>, <code>bool</code>, <code>str</code>, <code>void</code></li>
+              <li>Data structures: arrays, slices, structs, enums, payload enums, pointers</li>
+              <li>Utilities: <code>sizeof(T)</code>, casts with <code>as</code>, <code>argc/argv</code>, file I/O, string and byte helpers</li>
+              <li>Tooling: LLVM IR emission, optimized builds, debug builds, static docs, and a VS Code extension</li>
+            </ul>
+          </section>
 
-        <section class="section">
-          <h2>Quick Example</h2>
-          <pre><code>fn main() -> i32 {
+          <section class="section" id="quick-example">
+            <h2>Quick Example</h2>
+            <pre><code>fn main() -> i32 {
     print_ln_str("Hello, World!");
     return 0;
 }</code></pre>
-        </section>
+          </section>
 
-        <footer class="footer">
-          Monster compiler repository:
-          <a href="https://github.com/BitIntx/monster-lang">github.com/BitIntx/monster-lang</a>
-        </footer>
+          <footer class="footer">
+            Monster compiler repository:
+            <a href="https://github.com/BitIntx/monster-lang">github.com/BitIntx/monster-lang</a>
+          </footer>
+        </div>
+
+        <aside class="sidebar">
+          <div class="note">
+            <p><strong>On this page</strong></p>
+            <ul class="toc-list">
+              <li><a href="#pipeline">Pipeline</a></li>
+              <li><a href="#guides">Guides</a></li>
+              <li><a href="#features">Feature areas</a></li>
+              <li><a href="#quick-example">Quick example</a></li>
+            </ul>
+          </div>
+          <div class="note">
+            <p><strong>Common entry points</strong></p>
+            <ul class="link-list">
+              <li><a href="./install.html">Install Monster</a></li>
+              <li><a href="./language.html">Language reference</a></li>
+              <li><a href="./examples.html">Examples</a></li>
+            </ul>
+          </div>
+        </aside>
       </main>
     </div>
   </body>

@@ -65,7 +65,7 @@ pre code {
 }
 
 .site-shell {
-  width: min(1080px, calc(100% - 2rem));
+  width: min(1220px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 0 0 3rem;
 }
@@ -117,30 +117,30 @@ pre code {
 }
 
 .page-header,
-.hero,
-.section,
+.section {
+  margin-top: 0;
+  padding: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+}
+
 .note,
 .card,
 .feature {
-  margin-top: 1.25rem;
-  padding: 1.25rem;
+  margin-top: 1rem;
+  padding: 1rem;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 6px;
   background: #fff;
 }
 
-.hero {
-  display: block;
-}
-
-.hero h1,
 .page-header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.15rem;
   line-height: 1.2;
 }
 
-.hero p,
 .page-header p,
 .section p,
 .section li,
@@ -160,42 +160,6 @@ pre code {
   letter-spacing: 0.04em;
 }
 
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.6rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.button-primary {
-  background: var(--text);
-  color: #fff;
-  border-color: var(--text);
-}
-
-.button-secondary {
-  background: var(--surface);
-}
-
-.hero-panel {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line-soft);
-}
-
-.hero-panel h2,
 .section h2 {
   margin: 0;
   font-size: 1.25rem;
@@ -233,15 +197,27 @@ pre code {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 1.5rem;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 2rem;
   margin-top: 1.25rem;
+}
+
+.layout > :first-child {
+  grid-column: 2;
+}
+
+.layout > .sidebar {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .sidebar {
   position: sticky;
   top: 1rem;
   align-self: start;
+  margin-top: 1.5rem;
+  padding-right: 1rem;
+  border-right: 1px solid var(--line);
 }
 
 .section h3 {
@@ -257,6 +233,12 @@ pre code {
 .section ol {
   margin: 0.75rem 0 0;
   padding-left: 1.2rem;
+}
+
+.section:first-of-type,
+.page-header + .section {
+  border-top: 0;
+  padding-top: 0.25rem;
 }
 
 .section table {
@@ -294,23 +276,29 @@ pre code {
     grid-template-columns: 1fr;
   }
 
+  .layout > :first-child,
+  .layout > .sidebar {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .sidebar {
     position: static;
+    padding-right: 0;
+    border-right: 0;
   }
 }
 
 @media (max-width: 640px) {
   .site-shell {
-    width: min(100% - 1rem, 1080px);
+    width: min(100% - 1rem, 1220px);
   }
 
-  .hero h1,
   .page-header h1 {
     font-size: 1.6rem;
   }
 
   .page-header,
-  .hero,
   .section,
   .note,
   .card,

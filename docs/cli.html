@@ -29,7 +29,7 @@
             <p>The <code>mst</code> command is the entrypoint for checking, building, running, and cleaning Monster projects.</p>
           </section>
 
-          <section class="section">
+          <section class="section" id="basic">
             <h2>Basic Commands</h2>
             <pre><code>mst check exam.mnst
 mst emit-llvm exam.mnst
@@ -40,7 +40,7 @@ mst --help
 mst --version</code></pre>
           </section>
 
-          <section class="section">
+          <section class="section" id="debug">
             <h2>Debug Builds</h2>
             <pre><code>mst build --debug exam.mnst
 mst run --debug exam.mnst</code></pre>
@@ -50,7 +50,7 @@ mst run --debug exam.mnst</code></pre>
             </p>
           </section>
 
-          <section class="section">
+          <section class="section" id="args">
             <h2>Passing Program Arguments</h2>
             <pre><code>mst run examples/argv.mnst -- hello from monster</code></pre>
             <p>
@@ -59,7 +59,7 @@ mst run --debug exam.mnst</code></pre>
             </p>
           </section>
 
-          <section class="section">
+          <section class="section" id="output">
             <h2>Build Output</h2>
             <p>
               Generated binaries and intermediate LLVM files live in <code>target/mst/</code>.
@@ -70,8 +70,17 @@ mst run --debug exam.mnst</code></pre>
 
         <aside class="sidebar">
           <div class="note">
+            <p><strong>On this page</strong></p>
+            <ul class="toc-list">
+              <li><a href="#basic">Basic commands</a></li>
+              <li><a href="#debug">Debug builds</a></li>
+              <li><a href="#args">Program arguments</a></li>
+              <li><a href="#output">Build output</a></li>
+            </ul>
+          </div>
+          <div class="note">
             <p><strong>Pipeline</strong></p>
-            <p><code>emit-llvm</code> shows the compiler's raw LLVM IR output. <code>build</code> and <code>run</code> then optimize with <code>opt</code> and link through <code>clang</code>.</p>
+            <p><code>emit-llvm</code> shows raw IR. <code>build</code> and <code>run</code> then optimize with <code>opt</code> and link through <code>clang</code>.</p>
           </div>
           <div class="note">
             <p><strong>Need install steps?</strong></p>

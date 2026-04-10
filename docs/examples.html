@@ -22,13 +22,16 @@
         </nav>
       </header>
 
-      <main>
-        <section class="page-header">
-          <h1>Examples</h1>
-          <p>These examples ship with the repository and mirror the current compiler feature set.</p>
-        </section>
+      <main class="layout">
+        <div>
+          <section class="page-header">
+            <h1>Examples</h1>
+            <p>These examples ship with the repository and mirror the current compiler feature set.</p>
+          </section>
 
-        <section class="card-grid">
+          <section class="section" id="example-list">
+            <h2>Example Programs</h2>
+            <div class="card-grid">
           <article class="card">
             <h3><code>exam.mnst</code></h3>
             <p>The smallest "hello world" style program for quick sanity checks.</p>
@@ -82,15 +85,27 @@
             <p>Shows a manual growable vector built with <code>malloc</code>, <code>realloc</code>, and <code>free</code>.</p>
             <pre><code>mst run examples/growable_vec_i32.mnst</code></pre>
           </article>
-        </section>
+            </div>
+          </section>
 
-        <section class="section">
-          <h2>Raw LLVM Example</h2>
-          <p>
+          <section class="section" id="raw-llvm">
+            <h2>Raw LLVM Example</h2>
+            <p>
             The repository also includes a raw IR snapshot at
             <code>examples/growable_vec_i32.ll</code>, emitted by the current compiler.
-          </p>
-        </section>
+            </p>
+          </section>
+        </div>
+
+        <aside class="sidebar">
+          <div class="note">
+            <p><strong>On this page</strong></p>
+            <ul class="toc-list">
+              <li><a href="#example-list">Example programs</a></li>
+              <li><a href="#raw-llvm">Raw LLVM example</a></li>
+            </ul>
+          </div>
+        </aside>
       </main>
     </div>
   </body>
