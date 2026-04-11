@@ -41,7 +41,7 @@
   -> AST
   -> semantic analysis
   -> LLVM IR
-  -> opt-18 (-O2)
+  -> opt-18 (default -O2)
   -> clang-18
   -> native binary</code></pre>
             <ul>
@@ -64,7 +64,7 @@
             </article>
             <article class="card">
               <h3><a href="./cli.html">CLI</a></h3>
-              <p><code>check</code>, <code>emit-llvm</code>, <code>build</code>, <code>run</code>, and debug builds.</p>
+              <p><code>init</code>, <code>check</code>, <code>emit-llvm</code>, <code>build</code>, <code>run</code>, project manifests, and debug builds.</p>
             </article>
             <article class="card">
               <h3><a href="./examples.html">Examples</a></h3>
@@ -80,7 +80,7 @@
               <li>Types: <code>i32</code>, <code>u8</code>, <code>usize</code>, <code>bool</code>, <code>str</code>, <code>void</code></li>
               <li>Data structures: arrays, slices, structs, enums, payload enums, pointers</li>
               <li>Utilities: <code>sizeof(T)</code>, casts with <code>as</code>, <code>argc/argv</code>, file I/O, string and byte helpers</li>
-              <li>Tooling: LLVM IR emission, optimized builds, debug builds, static docs, a VS Code extension, and early self-hosting experiments</li>
+              <li>Tooling: project manifests, LLVM IR emission, optimized builds, debug builds, static docs, a VS Code extension, and early self-hosting experiments</li>
             </ul>
           </section>
 

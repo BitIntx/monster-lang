@@ -30,8 +30,42 @@ enum BuildMode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BuildArgs {
+    input: Option<String>,
+    overrides: BuildOptionOverrides,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedBuildArgs {
     input: String,
+    options: BuildOptions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OptLevel {
+    O0,
+    O1,
+    O2,
+    O3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TargetCpu {
+    Generic,
+    Native,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuildOptions {
     mode: BuildMode,
+    opt_level: OptLevel,
+    cpu: TargetCpu,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BuildOptionOverrides {
+    mode: Option<BuildMode>,
+    opt_level: Option<OptLevel>,
+    cpu: Option<TargetCpu>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,10 +74,96 @@ struct RunArgs {
     program_args: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InitArgs {
+    path: PathBuf,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ProjectConfig {
+    package: PackageConfig,
+    build: BuildConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PackageConfig {
+    name: Option<String>,
+    entry: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BuildConfig {
+    mode: Option<BuildMode>,
+    opt_level: Option<OptLevel>,
+    cpu: Option<TargetCpu>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct LoadKey {
     path: PathBuf,
     namespace: Option<String>,
+}
+
+impl BuildMode {
+    fn default_opt_level(self) -> OptLevel {
+        match self {
+            BuildMode::Release => OptLevel::O2,
+            BuildMode::Debug => OptLevel::O0,
+        }
+    }
+}
+
+impl OptLevel {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "0" => Ok(Self::O0),
+            "1" => Ok(Self::O1),
+            "2" => Ok(Self::O2),
+            "3" => Ok(Self::O3),
+            _ => Err(format!(
+                "invalid opt level '{value}', expected 0, 1, 2, or 3"
+            )),
+        }
+    }
+
+    fn as_u8(self) -> u8 {
+        match self {
+            Self::O0 => 0,
+            Self::O1 => 1,
+            Self::O2 => 2,
+            Self::O3 => 3,
+        }
+    }
+
+    fn clang_arg(self) -> String {
+        format!("-O{}", self.as_u8())
+    }
+
+    fn is_optimizing(self) -> bool {
+        self != Self::O0
+    }
+}
+
+impl TargetCpu {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "generic" => Ok(Self::Generic),
+            "native" => Ok(Self::Native),
+            _ => Err(format!(
+                "invalid cpu target '{value}', expected 'generic' or 'native'"
+            )),
+        }
+    }
+}
+
+impl Default for BuildOptions {
+    fn default() -> Self {
+        Self {
+            mode: BuildMode::Release,
+            opt_level: BuildMode::Release.default_opt_level(),
+            cpu: TargetCpu::Generic,
+        }
+    }
 }
 
 fn main() {
@@ -87,14 +207,18 @@ fn real_main() -> Result<(), String> {
             println!("cleaned: {}", artifact_dir.display());
             Ok(())
         }
+        "init" => {
+            let init_args = parse_init_args(args)?;
+            init_project(&init_args)
+        }
         "check" => {
-            let input = single_input_arg(args)?;
+            let input = resolve_input_arg(optional_input_arg(args)?)?;
             let _program = load_program(&input)?;
             println!("OK: {input}");
             Ok(())
         }
         "emit-llvm" => {
-            let input = single_input_arg(args)?;
+            let input = resolve_input_arg(optional_input_arg(args)?)?;
             let program = load_program(&input)?;
             let llvm_ir = emit_llvm_program(&program)?;
             print!("{llvm_ir}");
@@ -102,13 +226,15 @@ fn real_main() -> Result<(), String> {
         }
         "build" => {
             let build_args = parse_build_args(args)?;
-            let output = build_to_binary(&build_args.input, build_args.mode)?;
+            let resolved = resolve_build_args(build_args)?;
+            let output = build_to_binary(&resolved.input, &resolved.options)?;
             println!("built: {}", output.display());
             Ok(())
         }
         "run" => {
             let run_args = parse_run_args(args)?;
-            let output = build_to_binary(&run_args.build.input, run_args.build.mode)?;
+            let resolved = resolve_build_args(run_args.build)?;
+            let output = build_to_binary(&resolved.input, &resolved.options)?;
             let status = Command::new(&output)
                 .args(&run_args.program_args)
                 .status()
@@ -134,12 +260,14 @@ fn usage() -> String {
         "Monster compiler",
         "",
         "usage:",
-        "  mst check <file.mnst>",
-        "  mst emit-llvm <file.mnst>",
-        "  mst build <file.mnst>",
-        "  mst build --debug <file.mnst>",
-        "  mst run <file.mnst> [-- <args...>]",
-        "  mst run --debug <file.mnst> [-- <args...>]",
+        "  mst init [path]",
+        "  mst check [file.mnst]",
+        "  mst emit-llvm [file.mnst]",
+        "  mst build [file.mnst]",
+        "  mst build --debug [file.mnst]",
+        "  mst build --opt-level 3 --cpu native [file.mnst]",
+        "  mst run [file.mnst] [-- <args...>]",
+        "  mst run --debug [file.mnst] [-- <args...>]",
         "  mst clean",
         "  mst -upgrade",
         "  mst help",
@@ -149,21 +277,32 @@ fn usage() -> String {
         "  -h, --help      show this help",
         "  -V, --version   show compiler version",
         "  -upgrade        install the latest published release",
-        "  --debug         build without LLVM -O2 and link with clang -g -O0",
+        "  --debug         debug build profile, defaults to opt-level 0 and clang -g",
+        "  --release       release build profile, defaults to opt-level 2",
+        "  --opt-level N   optimize with level 0, 1, 2, or 3",
+        "  --cpu TARGET    use 'generic' or 'native' CPU codegen",
         "  --              pass remaining arguments to the compiled program",
     ]
     .join("\n")
         + "\n"
 }
 
-fn single_input_arg(mut args: impl Iterator<Item = String>) -> Result<String, String> {
-    let input = args.next().ok_or_else(usage)?;
+fn optional_input_arg(mut args: impl Iterator<Item = String>) -> Result<Option<String>, String> {
+    let input = args.next();
 
     if args.next().is_some() {
         return Err("too many arguments".into());
     }
 
     Ok(input)
+}
+
+fn resolve_input_arg(input: Option<String>) -> Result<String, String> {
+    Ok(resolve_build_args(BuildArgs {
+        input,
+        overrides: BuildOptionOverrides::default(),
+    })?
+    .input)
 }
 
 fn upgrade_to_latest() -> Result<(), String> {
@@ -293,42 +432,73 @@ fn running_as_root() -> bool {
         .is_some_and(|uid| uid.trim() == "0")
 }
 
-fn parse_build_args(args: impl Iterator<Item = String>) -> Result<BuildArgs, String> {
-    let mut input = None;
-    let mut mode = BuildMode::Release;
+fn parse_init_args(args: impl Iterator<Item = String>) -> Result<InitArgs, String> {
+    let mut path = None;
 
     for arg in args {
-        match arg.as_str() {
-            "--debug" => mode = BuildMode::Debug,
-            _ if arg.starts_with('-') => return Err(format!("unknown option: {arg}")),
-            _ => {
-                if input.is_some() {
-                    return Err("too many arguments".into());
-                }
-                input = Some(arg);
-            }
+        if arg.starts_with('-') {
+            return Err(format!("unknown option: {arg}"));
         }
+
+        if path.is_some() {
+            return Err("too many arguments".into());
+        }
+
+        path = Some(PathBuf::from(arg));
     }
 
-    let input = input.ok_or_else(usage)?;
-    Ok(BuildArgs { input, mode })
+    Ok(InitArgs {
+        path: path.unwrap_or_else(|| PathBuf::from(".")),
+    })
+}
+
+fn parse_build_args(args: impl Iterator<Item = String>) -> Result<BuildArgs, String> {
+    let mut input = None;
+    let mut overrides = BuildOptionOverrides::default();
+    let mut args = args.peekable();
+
+    while let Some(arg) = args.next() {
+        if parse_build_option(arg.as_str(), &mut args, &mut overrides)? {
+            continue;
+        }
+
+        if arg.starts_with('-') {
+            return Err(format!("unknown option: {arg}"));
+        }
+
+        if input.is_some() {
+            return Err("too many arguments".into());
+        }
+
+        input = Some(arg);
+    }
+
+    Ok(BuildArgs { input, overrides })
 }
 
 fn parse_run_args(args: impl Iterator<Item = String>) -> Result<RunArgs, String> {
     let mut input = None;
-    let mut mode = BuildMode::Release;
+    let mut overrides = BuildOptionOverrides::default();
     let mut program_args = Vec::new();
     let mut forwarding = false;
+    let mut args = args.peekable();
 
-    for arg in args {
+    while let Some(arg) = args.next() {
         if forwarding {
             program_args.push(arg);
             continue;
         }
 
+        if arg == "--" {
+            forwarding = true;
+            continue;
+        }
+
+        if parse_build_option(arg.as_str(), &mut args, &mut overrides)? {
+            continue;
+        }
+
         match arg.as_str() {
-            "--" => forwarding = true,
-            "--debug" => mode = BuildMode::Debug,
             _ if arg.starts_with('-') && input.is_none() => {
                 return Err(format!("unknown option: {arg}"));
             }
@@ -337,11 +507,414 @@ fn parse_run_args(args: impl Iterator<Item = String>) -> Result<RunArgs, String>
         }
     }
 
-    let input = input.ok_or_else(usage)?;
     Ok(RunArgs {
-        build: BuildArgs { input, mode },
+        build: BuildArgs { input, overrides },
         program_args,
     })
+}
+
+fn parse_build_option(
+    arg: &str,
+    args: &mut impl Iterator<Item = String>,
+    overrides: &mut BuildOptionOverrides,
+) -> Result<bool, String> {
+    match arg {
+        "--debug" => {
+            overrides.mode = Some(BuildMode::Debug);
+            Ok(true)
+        }
+        "--release" => {
+            overrides.mode = Some(BuildMode::Release);
+            Ok(true)
+        }
+        "--opt-level" => {
+            let value = args
+                .next()
+                .ok_or_else(|| "--opt-level expects 0, 1, 2, or 3".to_string())?;
+            overrides.opt_level = Some(OptLevel::parse(&value)?);
+            Ok(true)
+        }
+        "--cpu" => {
+            let value = args
+                .next()
+                .ok_or_else(|| "--cpu expects 'generic' or 'native'".to_string())?;
+            overrides.cpu = Some(TargetCpu::parse(&value)?);
+            Ok(true)
+        }
+        _ => {
+            if let Some(value) = arg.strip_prefix("--opt-level=") {
+                overrides.opt_level = Some(OptLevel::parse(value)?);
+                Ok(true)
+            } else if let Some(value) = arg.strip_prefix("--cpu=") {
+                overrides.cpu = Some(TargetCpu::parse(value)?);
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+    }
+}
+
+fn resolve_build_args(args: BuildArgs) -> Result<ResolvedBuildArgs, String> {
+    let manifest_start = match &args.input {
+        Some(input) => manifest_start_for_input(input)?,
+        None => env::current_dir().map_err(|e| format!("failed to get current directory: {e}"))?,
+    };
+    let manifest_path = find_project_manifest(&manifest_start);
+    let config = match &manifest_path {
+        Some(path) => load_project_config(path)?,
+        None => ProjectConfig::default(),
+    };
+
+    let input = match args.input {
+        Some(input) => input,
+        None => {
+            let entry = config.package.entry.as_deref().ok_or_else(|| {
+                "missing input file and no Monster.toml entry found; pass <file.mnst> or run mst init"
+                    .to_string()
+            })?;
+            let manifest_dir = manifest_path
+                .as_ref()
+                .and_then(|path| path.parent())
+                .ok_or_else(|| "internal error: project manifest has no parent".to_string())?;
+            manifest_dir.join(entry).to_string_lossy().into_owned()
+        }
+    };
+
+    Ok(ResolvedBuildArgs {
+        input,
+        options: resolve_build_options(&config.build, &args.overrides),
+    })
+}
+
+fn resolve_build_options(config: &BuildConfig, overrides: &BuildOptionOverrides) -> BuildOptions {
+    let mut options = BuildOptions::default();
+
+    if let Some(mode) = config.mode {
+        options.mode = mode;
+        if config.opt_level.is_none() {
+            options.opt_level = mode.default_opt_level();
+        }
+    }
+
+    if let Some(opt_level) = config.opt_level {
+        options.opt_level = opt_level;
+    }
+
+    if let Some(cpu) = config.cpu {
+        options.cpu = cpu;
+    }
+
+    if let Some(mode) = overrides.mode {
+        options.mode = mode;
+        if overrides.opt_level.is_none() {
+            options.opt_level = mode.default_opt_level();
+        }
+    }
+
+    if let Some(opt_level) = overrides.opt_level {
+        options.opt_level = opt_level;
+    }
+
+    if let Some(cpu) = overrides.cpu {
+        options.cpu = cpu;
+    }
+
+    options
+}
+
+fn manifest_start_for_input(input: &str) -> Result<PathBuf, String> {
+    let path = Path::new(input);
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        env::current_dir()
+            .map_err(|e| format!("failed to get current directory: {e}"))?
+            .join(path)
+    };
+
+    Ok(absolute
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(".")))
+}
+
+fn find_project_manifest(start: &Path) -> Option<PathBuf> {
+    let mut current = start.to_path_buf();
+
+    loop {
+        for name in ["Monster.toml", "monster.toml"] {
+            let candidate = current.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+fn load_project_config(path: &Path) -> Result<ProjectConfig, String> {
+    let source = fs::read_to_string(path)
+        .map_err(|e| format!("failed to read project config '{}': {}", path.display(), e))?;
+    parse_project_config(&source, path)
+}
+
+fn parse_project_config(source: &str, path: &Path) -> Result<ProjectConfig, String> {
+    let mut config = ProjectConfig::default();
+    let mut section = String::new();
+
+    for (line_index, raw_line) in source.lines().enumerate() {
+        let line_no = line_index + 1;
+        let uncommented = strip_toml_comment(raw_line);
+        let line = uncommented.trim();
+
+        if line.is_empty() {
+            continue;
+        }
+
+        if line.starts_with('[') && line.ends_with(']') {
+            section = line[1..line.len() - 1].trim().to_string();
+            continue;
+        }
+
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid project config '{}': line {} expected key = value",
+                path.display(),
+                line_no
+            ));
+        };
+        let key = key.trim();
+        let value = value.trim();
+
+        match (section.as_str(), key) {
+            ("package", "name") => {
+                config.package.name = Some(parse_toml_string(value, path, line_no)?);
+            }
+            ("package", "entry") => {
+                config.package.entry = Some(parse_toml_string(value, path, line_no)?);
+            }
+            ("build", "profile") | ("build", "mode") => {
+                let value = parse_toml_string(value, path, line_no)?;
+                config.build.mode = Some(parse_build_mode_value(&value, path, line_no)?);
+            }
+            ("build", "opt-level") | ("build", "opt_level") => {
+                config.build.opt_level =
+                    Some(OptLevel::parse(parse_toml_integer(value)?.as_str())?);
+            }
+            ("build", "cpu") => {
+                let value = parse_toml_string(value, path, line_no)?;
+                config.build.cpu = Some(TargetCpu::parse(&value)?);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(config)
+}
+
+fn strip_toml_comment(line: &str) -> String {
+    let mut escaped = false;
+    let mut in_string = false;
+
+    for (index, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_string => escaped = true,
+            '"' => in_string = !in_string,
+            '#' if !in_string => return line[..index].to_string(),
+            _ => {}
+        }
+    }
+
+    line.to_string()
+}
+
+fn parse_toml_string(value: &str, path: &Path, line_no: usize) -> Result<String, String> {
+    if !(value.starts_with('"') && value.ends_with('"')) || value.len() < 2 {
+        return Err(format!(
+            "invalid project config '{}': line {} expected a quoted string",
+            path.display(),
+            line_no
+        ));
+    }
+
+    let mut out = String::new();
+    let mut chars = value[1..value.len() - 1].chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+
+        let escaped = chars.next().ok_or_else(|| {
+            format!(
+                "invalid project config '{}': line {} has dangling escape",
+                path.display(),
+                line_no
+            )
+        })?;
+
+        match escaped {
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            '"' => out.push('"'),
+            '\\' => out.push('\\'),
+            _ => {
+                return Err(format!(
+                    "invalid project config '{}': line {} has unsupported escape '\\{}'",
+                    path.display(),
+                    line_no,
+                    escaped
+                ));
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+fn parse_toml_integer(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.chars().all(|ch| ch.is_ascii_digit()) && !trimmed.is_empty() {
+        Ok(trimmed.to_string())
+    } else {
+        Err(format!("expected integer value, found '{value}'"))
+    }
+}
+
+fn parse_build_mode_value(value: &str, path: &Path, line_no: usize) -> Result<BuildMode, String> {
+    match value {
+        "release" => Ok(BuildMode::Release),
+        "debug" => Ok(BuildMode::Debug),
+        _ => Err(format!(
+            "invalid project config '{}': line {} expected profile 'release' or 'debug'",
+            path.display(),
+            line_no
+        )),
+    }
+}
+
+fn init_project(args: &InitArgs) -> Result<(), String> {
+    let root = &args.path;
+
+    if root.exists() && !root.is_dir() {
+        return Err(format!(
+            "'{}' exists but is not a directory",
+            root.display()
+        ));
+    }
+
+    fs::create_dir_all(root).map_err(|e| {
+        format!(
+            "failed to create project directory '{}': {}",
+            root.display(),
+            e
+        )
+    })?;
+
+    let name = project_name_for_init(root)?;
+    let src_dir = root.join("src");
+    fs::create_dir_all(&src_dir).map_err(|e| {
+        format!(
+            "failed to create source directory '{}': {}",
+            src_dir.display(),
+            e
+        )
+    })?;
+
+    write_new_file(
+        &root.join("Monster.toml"),
+        &format!(
+            r#"[package]
+name = "{name}"
+entry = "src/main.mnst"
+
+[build]
+profile = "release"
+opt-level = 2
+cpu = "generic"
+"#
+        ),
+    )?;
+
+    write_new_file(
+        &src_dir.join("main.mnst"),
+        r#"fn main() -> i32 {
+    print_ln_str("Hello, Monster!");
+    return 0;
+}
+"#,
+    )?;
+
+    let gitignore = root.join(".gitignore");
+    if !gitignore.exists() {
+        fs::write(&gitignore, "target/\n")
+            .map_err(|e| format!("failed to write '{}': {}", gitignore.display(), e))?;
+    }
+
+    println!("created Monster project: {}", root.display());
+    if root == Path::new(".") {
+        println!("try: mst run");
+    } else {
+        println!("try: cd {} && mst run", root.display());
+    }
+
+    Ok(())
+}
+
+fn project_name_for_init(root: &Path) -> Result<String, String> {
+    let source = if root == Path::new(".") {
+        env::current_dir()
+            .map_err(|e| format!("failed to get current directory: {e}"))?
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("monster-app")
+            .to_string()
+    } else {
+        root.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("monster-app")
+            .to_string()
+    };
+
+    let sanitized = source
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    Ok(if sanitized.is_empty() {
+        "monster-app".to_string()
+    } else {
+        sanitized
+    })
+}
+
+fn write_new_file(path: &Path, contents: &str) -> Result<(), String> {
+    if path.exists() {
+        return Err(format!(
+            "'{}' already exists; refusing to overwrite it",
+            path.display()
+        ));
+    }
+
+    fs::write(path, contents).map_err(|e| format!("failed to write '{}': {}", path.display(), e))
 }
 
 fn load_program(path: &str) -> Result<ast::Program, String> {
@@ -808,7 +1381,7 @@ fn is_loader_builtin_function(name: &str) -> bool {
     )
 }
 
-fn build_to_binary(input: &str, mode: BuildMode) -> Result<PathBuf, String> {
+fn build_to_binary(input: &str, options: &BuildOptions) -> Result<PathBuf, String> {
     let program = load_program(input)?;
     let llvm_ir = emit_llvm_program(&program)?;
 
@@ -836,27 +1409,24 @@ fn build_to_binary(input: &str, mode: BuildMode) -> Result<PathBuf, String> {
 
     verify_llvm_ir(&ll_path)?;
 
-    let compile_input = match mode {
-        BuildMode::Release => {
-            optimize_llvm_ir(&ll_path, &opt_ll_path)?;
-            verify_llvm_ir(&opt_ll_path)?;
-            opt_ll_path.as_path()
+    let compile_input = if options.opt_level.is_optimizing() {
+        optimize_llvm_ir(&ll_path, &opt_ll_path, options.opt_level)?;
+        verify_llvm_ir(&opt_ll_path)?;
+        opt_ll_path.as_path()
+    } else {
+        if opt_ll_path.exists() {
+            fs::remove_file(&opt_ll_path).map_err(|e| {
+                format!(
+                    "failed to remove stale optimized LLVM IR '{}': {}",
+                    opt_ll_path.display(),
+                    e
+                )
+            })?;
         }
-        BuildMode::Debug => {
-            if opt_ll_path.exists() {
-                fs::remove_file(&opt_ll_path).map_err(|e| {
-                    format!(
-                        "failed to remove stale optimized LLVM IR '{}': {}",
-                        opt_ll_path.display(),
-                        e
-                    )
-                })?;
-            }
-            ll_path.as_path()
-        }
+        ll_path.as_path()
     };
 
-    compile_to_native(input, compile_input, &out_path, mode)?;
+    compile_to_native(input, compile_input, &out_path, options)?;
 
     fs::canonicalize(&out_path).map_err(|e| {
         format!(
@@ -872,16 +1442,21 @@ fn compile_to_native(
     input: &str,
     llvm_input: &Path,
     output_path: &Path,
-    mode: BuildMode,
+    options: &BuildOptions,
 ) -> Result<(), String> {
     let clang = find_tool(&["clang-18", "clang"])
         .ok_or_else(|| "failed to find clang-18 or clang on PATH".to_string())?;
 
     let mut command = Command::new(&clang);
     command.arg(llvm_input);
+    command.arg(options.opt_level.clang_arg());
 
-    if mode == BuildMode::Debug {
-        command.arg("-g").arg("-O0");
+    if options.mode == BuildMode::Debug {
+        command.arg("-g");
+    }
+
+    if options.cpu == TargetCpu::Native {
+        command.arg("-march=native");
     }
 
     let output = command
@@ -920,12 +1495,13 @@ fn clean_artifacts(path: &Path) -> Result<(), String> {
     })
 }
 
-fn optimize_llvm_ir(input: &Path, output: &Path) -> Result<(), String> {
+fn optimize_llvm_ir(input: &Path, output: &Path, opt_level: OptLevel) -> Result<(), String> {
     let opt = find_tool(&["opt-18", "opt"])
         .ok_or_else(|| "failed to find opt-18 or opt on PATH".to_string())?;
+    let passes = format!("default<O{}>", opt_level.as_u8());
 
     let command_output = Command::new(&opt)
-        .arg("-passes=default<O2>")
+        .arg(format!("-passes={passes}"))
         .arg("-S")
         .arg(input)
         .arg("-o")
@@ -990,8 +1566,9 @@ fn find_tool(candidates: &[&str]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        BuildArgs, BuildMode, Lexer, RunArgs, build_to_binary, load_program, parse_build_args,
-        parse_run_args,
+        BuildArgs, BuildMode, BuildOptionOverrides, BuildOptions, InitArgs, Lexer, OptLevel,
+        RunArgs, TargetCpu, build_to_binary, init_project, load_program, parse_build_args,
+        parse_project_config, parse_run_args, resolve_build_args,
     };
     use crate::token::TokenKind;
     use std::fs;
@@ -1008,8 +1585,8 @@ mod tests {
         assert_eq!(
             parsed,
             BuildArgs {
-                input: "exam.mnst".to_string(),
-                mode: BuildMode::Release,
+                input: Some("exam.mnst".to_string()),
+                overrides: BuildOptionOverrides::default(),
             }
         );
     }
@@ -1022,8 +1599,12 @@ mod tests {
         assert_eq!(
             parsed,
             BuildArgs {
-                input: "exam.mnst".to_string(),
-                mode: BuildMode::Debug,
+                input: Some("exam.mnst".to_string()),
+                overrides: BuildOptionOverrides {
+                    mode: Some(BuildMode::Debug),
+                    opt_level: None,
+                    cpu: None,
+                },
             }
         );
     }
@@ -1036,8 +1617,39 @@ mod tests {
         assert_eq!(
             parsed,
             BuildArgs {
-                input: "exam.mnst".to_string(),
-                mode: BuildMode::Debug,
+                input: Some("exam.mnst".to_string()),
+                overrides: BuildOptionOverrides {
+                    mode: Some(BuildMode::Debug),
+                    opt_level: None,
+                    cpu: None,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn parses_build_optimization_flags() {
+        let parsed = parse_build_args(
+            vec![
+                "--release".to_string(),
+                "--opt-level=3".to_string(),
+                "--cpu".to_string(),
+                "native".to_string(),
+                "exam.mnst".to_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            parsed,
+            BuildArgs {
+                input: Some("exam.mnst".to_string()),
+                overrides: BuildOptionOverrides {
+                    mode: Some(BuildMode::Release),
+                    opt_level: Some(OptLevel::O3),
+                    cpu: Some(TargetCpu::Native),
+                },
             }
         );
     }
@@ -1066,8 +1678,8 @@ mod tests {
             parsed,
             RunArgs {
                 build: BuildArgs {
-                    input: "exam.mnst".to_string(),
-                    mode: BuildMode::Release,
+                    input: Some("exam.mnst".to_string()),
+                    overrides: BuildOptionOverrides::default(),
                 },
                 program_args: Vec::new(),
             }
@@ -1092,12 +1704,120 @@ mod tests {
             parsed,
             RunArgs {
                 build: BuildArgs {
-                    input: "exam.mnst".to_string(),
-                    mode: BuildMode::Debug,
+                    input: Some("exam.mnst".to_string()),
+                    overrides: BuildOptionOverrides {
+                        mode: Some(BuildMode::Debug),
+                        opt_level: None,
+                        cpu: None,
+                    },
                 },
                 program_args: vec!["alpha".to_string(), "--flag".to_string()],
             }
         );
+    }
+
+    #[test]
+    fn parses_project_config_build_options() {
+        let config = parse_project_config(
+            r#"
+            [package]
+            name = "demo"
+            entry = "src/main.mnst"
+
+            [build]
+            profile = "debug"
+            opt-level = 1
+            cpu = "native"
+            "#,
+            Path::new("Monster.toml"),
+        )
+        .unwrap();
+
+        assert_eq!(config.package.name, Some("demo".to_string()));
+        assert_eq!(config.package.entry, Some("src/main.mnst".to_string()));
+        assert_eq!(config.build.mode, Some(BuildMode::Debug));
+        assert_eq!(config.build.opt_level, Some(OptLevel::O1));
+        assert_eq!(config.build.cpu, Some(TargetCpu::Native));
+    }
+
+    #[test]
+    fn resolves_manifest_entry_and_cli_overrides() {
+        let _guard = SELFHOST_LEXER_TEST_LOCK.lock().unwrap();
+        let temp_dir = unique_temp_dir("monster-manifest");
+        fs::create_dir_all(temp_dir.join("src")).unwrap();
+        fs::write(
+            temp_dir.join("Monster.toml"),
+            r#"
+            [package]
+            name = "demo"
+            entry = "src/main.mnst"
+
+            [build]
+            profile = "debug"
+            cpu = "native"
+            "#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.join("src").join("main.mnst"),
+            r#"
+            fn main() -> i32 {
+                return 0;
+            }
+            "#,
+        )
+        .unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+        let resolved = resolve_build_args(BuildArgs {
+            input: None,
+            overrides: BuildOptionOverrides {
+                mode: Some(BuildMode::Release),
+                opt_level: Some(OptLevel::O3),
+                cpu: None,
+            },
+        })
+        .unwrap();
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert_eq!(
+            PathBuf::from(&resolved.input),
+            temp_dir.join("src/main.mnst")
+        );
+        assert_eq!(
+            resolved.options,
+            BuildOptions {
+                mode: BuildMode::Release,
+                opt_level: OptLevel::O3,
+                cpu: TargetCpu::Native,
+            }
+        );
+
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn init_project_writes_default_skeleton() {
+        let temp_dir = unique_temp_dir("monster-init");
+        let project_dir = temp_dir.join("demo-app");
+
+        init_project(&InitArgs {
+            path: project_dir.clone(),
+        })
+        .unwrap();
+
+        let manifest = fs::read_to_string(project_dir.join("Monster.toml")).unwrap();
+        let main = fs::read_to_string(project_dir.join("src/main.mnst")).unwrap();
+        let gitignore = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+
+        assert!(manifest.contains("name = \"demo-app\""));
+        assert!(manifest.contains("entry = \"src/main.mnst\""));
+        assert!(manifest.contains("opt-level = 2"));
+        assert!(main.contains("Hello, Monster!"));
+        assert!(gitignore.contains("target/"));
+
+        fs::remove_dir_all(temp_dir).unwrap();
     }
 
     #[test]
@@ -1273,7 +1993,8 @@ mod tests {
         fs::write(&input_path, source).unwrap();
 
         let expected = rust_lexer_kind_values(source).unwrap();
-        let selfhost_lexer = build_to_binary("selfhost/main.mnst", BuildMode::Release).unwrap();
+        let selfhost_lexer =
+            build_to_binary("selfhost/main.mnst", &BuildOptions::default()).unwrap();
         let output = Command::new(&selfhost_lexer)
             .arg(&input_path)
             .arg("--dump-kinds")

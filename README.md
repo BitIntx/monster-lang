@@ -7,7 +7,7 @@ Monster is an experimental low-level, ahead-of-time systems programming language
 
 The current compiler is written in Rust and targets LLVM IR.
 
-`.mnst source -> lexer -> parser -> AST -> semantic analysis -> LLVM IR -> opt-18 (-O2) -> clang-18 -> native binary`
+`.mnst source -> lexer -> parser -> AST -> semantic analysis -> LLVM IR -> opt-18 (default -O2) -> clang-18 -> native binary`
 
 The compiler executable is named `mst`, and Monster source files use the `.mnst` extension.
 
@@ -101,10 +101,19 @@ If you installed from a local source checkout, `./install/uninstall.sh` also wor
 After installing `mst`, you can use it directly from your terminal:
 
 ```bash
+mst init hello-monster
+cd hello-monster
+mst run
+```
+
+You can also compile individual Monster source files directly:
+
+```bash
 mst check exam.mnst
 mst emit-llvm exam.mnst
 mst build exam.mnst
 mst build --debug exam.mnst
+mst build --opt-level 3 --cpu native exam.mnst
 mst run exam.mnst
 mst run --debug exam.mnst
 mst run examples/argv.mnst -- hello
@@ -117,8 +126,26 @@ mst --version
 ```
 
 Generated binaries and intermediate LLVM files are written to `target/mst/`.
-`--debug` builds skip LLVM `-O2` optimization and link with `clang -g -O0`.
+`--debug` selects the debug build profile, defaults to `--opt-level 0`, and links with `clang -g`.
+Release builds default to `--opt-level 2`.
+Use `--release`, `--opt-level 0|1|2|3`, and `--cpu generic|native` to tune build behavior.
 Use `--` to forward remaining CLI arguments to the compiled Monster program.
+
+`mst init` creates a small project skeleton with `Monster.toml`, `src/main.mnst`, and `.gitignore`.
+When `Monster.toml` has a package entry, `mst check`, `mst emit-llvm`, `mst build`, and `mst run` can be used without passing a source file:
+
+```toml
+[package]
+name = "hello-monster"
+entry = "src/main.mnst"
+
+[build]
+profile = "release"
+opt-level = 2
+cpu = "generic"
+```
+
+Command-line build flags override `Monster.toml`.
 
 ## VS Code
 
@@ -159,7 +186,7 @@ Implemented today:
 - Semantic analysis with type checking, mutability checks, and return-path validation
 - LLVM IR code generation
 - Builtin I/O via LLVM runtime helpers
-- CLI commands for `check`, `emit-llvm`, `build`, `run`, and `clean`
+- CLI commands for `init`, `check`, `emit-llvm`, `build`, `run`, and `clean`
 - First self-hosting slice: Monster-written lexer prototype under `selfhost/`
 
 Supported language features:
@@ -327,6 +354,7 @@ cargo run -- check exam.mnst
 cargo run -- emit-llvm exam.mnst
 cargo run -- build exam.mnst
 cargo run -- build --debug exam.mnst
+cargo run -- build --opt-level 3 --cpu native exam.mnst
 cargo run -- run exam.mnst
 cargo run -- run --debug exam.mnst
 cargo run -- clean
@@ -341,6 +369,7 @@ Or run the built compiler binary:
 ./target/debug/mst emit-llvm exam.mnst
 ./target/debug/mst build exam.mnst
 ./target/debug/mst build --debug exam.mnst
+./target/debug/mst build --opt-level 3 --cpu native exam.mnst
 ./target/debug/mst run exam.mnst
 ./target/debug/mst run --debug exam.mnst
 ./target/debug/mst clean

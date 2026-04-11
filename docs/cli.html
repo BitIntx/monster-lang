@@ -26,11 +26,14 @@
         <div>
           <section class="page-header">
             <h1>CLI Reference</h1>
-            <p>The <code>mst</code> command is the entrypoint for checking, building, running, and cleaning Monster projects.</p>
+            <p>The <code>mst</code> command is the entrypoint for creating, checking, building, running, and cleaning Monster projects.</p>
           </section>
 
           <section class="section" id="basic">
             <h2>Basic Commands</h2>
+            <pre><code>mst init hello-monster
+cd hello-monster
+mst run</code></pre>
             <pre><code>mst check exam.mnst
 mst emit-llvm exam.mnst
 mst build exam.mnst
@@ -42,12 +45,35 @@ mst --version</code></pre>
           </section>
 
           <section class="section" id="debug">
-            <h2>Debug Builds</h2>
+            <h2>Build Profiles and Optimization</h2>
             <pre><code>mst build --debug exam.mnst
-mst run --debug exam.mnst</code></pre>
+mst run --debug exam.mnst
+mst build --release --opt-level 3 --cpu native exam.mnst</code></pre>
             <p>
-              Debug builds keep the raw LLVM IR in <code>target/mst/</code>, skip LLVM <code>-O2</code>,
-              and link with <code>clang -g -O0</code>.
+              Debug builds keep the raw LLVM IR in <code>target/mst/</code>, default to <code>--opt-level 0</code>,
+              and link with <code>clang -g</code>. Release builds default to <code>--opt-level 2</code>.
+              Use <code>--opt-level 0|1|2|3</code> and <code>--cpu generic|native</code> when you want
+              to tune the LLVM and clang pipeline.
+            </p>
+          </section>
+
+          <section class="section" id="manifest">
+            <h2>Project Manifest</h2>
+            <p>
+              <code>Monster.toml</code> stores the default package entry and build options. Command-line
+              flags override the manifest.
+            </p>
+            <pre><code>[package]
+name = "hello-monster"
+entry = "src/main.mnst"
+
+[build]
+profile = "release"
+opt-level = 2
+cpu = "generic"</code></pre>
+            <p>
+              With an entry configured, <code>mst check</code>, <code>mst emit-llvm</code>,
+              <code>mst build</code>, and <code>mst run</code> can be used without a source file.
             </p>
           </section>
 
@@ -83,7 +109,8 @@ mst run --debug exam.mnst</code></pre>
             <p><strong>On this page</strong></p>
             <ul class="toc-list">
               <li><a href="#basic">Basic commands</a></li>
-              <li><a href="#debug">Debug builds</a></li>
+              <li><a href="#debug">Build profiles</a></li>
+              <li><a href="#manifest">Project manifest</a></li>
               <li><a href="#args">Program arguments</a></li>
               <li><a href="#output">Build output</a></li>
               <li><a href="#upgrade">Update compiler</a></li>
