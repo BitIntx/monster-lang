@@ -50,3 +50,5 @@ jobs:
           cargo run --locked -- check examples/growable_vec_i32.mnst
           cargo run --locked -- emit-llvm examples/growable_vec_i32.mnst > /tmp/growable_vec_i32.ll
           cargo run --locked -- run examples/growable_vec_i32.mnst
+          cargo run --locked -- check selfhost/main.mnst
+          cargo run --locked -- run selfhost/main.mnst -- exam.mnst

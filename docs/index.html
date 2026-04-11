@@ -80,8 +80,17 @@
               <li>Types: <code>i32</code>, <code>u8</code>, <code>usize</code>, <code>bool</code>, <code>str</code>, <code>void</code></li>
               <li>Data structures: arrays, slices, structs, enums, payload enums, pointers</li>
               <li>Utilities: <code>sizeof(T)</code>, casts with <code>as</code>, <code>argc/argv</code>, file I/O, string and byte helpers</li>
-              <li>Tooling: LLVM IR emission, optimized builds, debug builds, static docs, and a VS Code extension</li>
+              <li>Tooling: LLVM IR emission, optimized builds, debug builds, static docs, a VS Code extension, and early self-hosting experiments</li>
             </ul>
+          </section>
+
+          <section class="section" id="self-hosting">
+            <h2>Self-Hosting</h2>
+            <p>
+              The first self-hosting slice lives in <code>selfhost/</code>. It is a Monster-written lexer
+              prototype that reads Monster source with <code>read_file</code> and scans it for tokens.
+            </p>
+            <pre><code>mst run selfhost/main.mnst -- exam.mnst</code></pre>
           </section>
 
           <section class="section" id="quick-example">
@@ -105,6 +114,7 @@
               <li><a href="#pipeline">Pipeline</a></li>
               <li><a href="#guides">Guides</a></li>
               <li><a href="#features">Feature areas</a></li>
+              <li><a href="#self-hosting">Self-hosting</a></li>
               <li><a href="#quick-example">Quick example</a></li>
             </ul>
           </div>

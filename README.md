@@ -127,6 +127,19 @@ It currently provides:
 
 To work on the extension locally, clone `monster-vscode`, open it in VS Code, and press `F5`.
 
+## Self-Hosting
+
+Monster now has its first self-hosting experiment under [`selfhost/`](./selfhost/).
+
+The current self-hosted slice is a Monster-written lexer prototype:
+
+```bash
+mst run selfhost/main.mnst -- exam.mnst
+mst run selfhost/main.mnst -- examples/match.mnst
+```
+
+This does not replace the Rust lexer yet. It is the first incremental bootstrap step: Monster code reading and scanning Monster source.
+
 ## Current Status
 
 Monster is already a working compiler prototype.
@@ -140,6 +153,7 @@ Implemented today:
 - LLVM IR code generation
 - Builtin I/O via LLVM runtime helpers
 - CLI commands for `check`, `emit-llvm`, `build`, `run`, and `clean`
+- First self-hosting slice: Monster-written lexer prototype under `selfhost/`
 
 Supported language features:
 

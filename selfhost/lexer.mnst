@@ -1,0 +1,200 @@
+import "token.mnst";
+
+fn is_alpha(c: u8) -> bool {
+    return (c >= (65 as u8) && c <= (90 as u8)) || (c >= (97 as u8) && c <= (122 as u8)) || c == (95 as u8);
+}
+
+fn is_digit(c: u8) -> bool {
+    return c >= (48 as u8) && c <= (57 as u8);
+}
+
+fn is_alnum(c: u8) -> bool {
+    return is_alpha(c) || is_digit(c);
+}
+
+fn is_space(c: u8) -> bool {
+    return c == (32 as u8) || c == (10 as u8) || c == (13 as u8) || c == (9 as u8);
+}
+
+fn keyword_eq(data: *u8, start: usize, len: usize, text: str) -> bool {
+    if len != strlen(text) {
+        return false;
+    }
+
+    return memcmp(&data[start], text as *u8, len) == 0;
+}
+
+fn classify_identifier(data: *u8, start: usize, len: usize) -> TokenKind {
+    if keyword_eq(data, start, len, "extern") {
+        return Extern;
+    } else if keyword_eq(data, start, len, "import") {
+        return Import;
+    } else if keyword_eq(data, start, len, "fn") {
+        return Fn;
+    } else if keyword_eq(data, start, len, "struct") {
+        return Struct;
+    } else if keyword_eq(data, start, len, "enum") {
+        return Enum;
+    } else if keyword_eq(data, start, len, "match") {
+        return Match;
+    } else if keyword_eq(data, start, len, "sizeof") {
+        return SizeOf;
+    } else if keyword_eq(data, start, len, "let") {
+        return Let;
+    } else if keyword_eq(data, start, len, "mut") {
+        return Mut;
+    } else if keyword_eq(data, start, len, "as") {
+        return As;
+    } else if keyword_eq(data, start, len, "return") {
+        return Return;
+    } else if keyword_eq(data, start, len, "if") {
+        return If;
+    } else if keyword_eq(data, start, len, "else") {
+        return Else;
+    } else if keyword_eq(data, start, len, "while") {
+        return While;
+    } else if keyword_eq(data, start, len, "break") {
+        return Break;
+    } else if keyword_eq(data, start, len, "continue") {
+        return Continue;
+    } else if keyword_eq(data, start, len, "true") {
+        return True;
+    } else if keyword_eq(data, start, len, "false") {
+        return False;
+    }
+
+    return Ident;
+}
+
+fn scan_identifier(data: *u8, start: usize, len: usize) -> usize {
+    let mut i: usize = start;
+
+    while i < len && is_alnum(data[i]) {
+        i = i + (1 as usize);
+    }
+
+    return i;
+}
+
+fn scan_number(data: *u8, start: usize, len: usize) -> usize {
+    let mut i: usize = start;
+
+    while i < len && is_digit(data[i]) {
+        i = i + (1 as usize);
+    }
+
+    return i;
+}
+
+fn skip_line_comment(data: *u8, start: usize, len: usize) -> usize {
+    let mut i: usize = start + (2 as usize);
+
+    while i < len && data[i] != (10 as u8) {
+        i = i + (1 as usize);
+    }
+
+    return i;
+}
+
+fn scan_string(data: *u8, start: usize, len: usize) -> usize {
+    let mut i: usize = start + (1 as usize);
+
+    while i < len {
+        if data[i] == (92 as u8) {
+            i = i + (2 as usize);
+        } else if data[i] == (34 as u8) {
+            return i + (1 as usize);
+        } else {
+            i = i + (1 as usize);
+        }
+    }
+
+    return i;
+}
+
+fn scan_symbol(data: *u8, start: usize, len: usize) -> usize {
+    if start + (1 as usize) >= len {
+        return start + (1 as usize);
+    }
+
+    let c: u8 = data[start];
+    let next: u8 = data[start + (1 as usize)];
+
+    if c == (45 as u8) && next == (62 as u8) {
+        return start + (2 as usize);
+    } else if c == (61 as u8) && next == (62 as u8) {
+        return start + (2 as usize);
+    } else if c == (61 as u8) && next == (61 as u8) {
+        return start + (2 as usize);
+    } else if c == (33 as u8) && next == (61 as u8) {
+        return start + (2 as usize);
+    } else if c == (38 as u8) && next == (38 as u8) {
+        return start + (2 as usize);
+    } else if c == (124 as u8) && next == (124 as u8) {
+        return start + (2 as usize);
+    } else if c == (60 as u8) && next == (61 as u8) {
+        return start + (2 as usize);
+    } else if c == (62 as u8) && next == (61 as u8) {
+        return start + (2 as usize);
+    }
+
+    return start + (1 as usize);
+}
+
+fn count_tokens(data: *u8, len: usize) -> i32 {
+    let mut i: usize = 0 as usize;
+    let mut count: i32 = 0;
+
+    while i < len {
+        let c: u8 = data[i];
+
+        if is_space(c) {
+            i = i + (1 as usize);
+        } else if c == (47 as u8) && i + (1 as usize) < len && data[i + (1 as usize)] == (47 as u8) {
+            i = skip_line_comment(data, i, len);
+        } else if is_alpha(c) {
+            let start: usize = i;
+            i = scan_identifier(data, i, len);
+            let kind: TokenKind = classify_identifier(data, start, i - start);
+
+            let score: i32 = match kind {
+                Extern => 0,
+                Import => 0,
+                Fn => 0,
+                Struct => 0,
+                Enum => 0,
+                Match => 0,
+                SizeOf => 0,
+                Let => 0,
+                Mut => 0,
+                As => 0,
+                Return => 0,
+                If => 0,
+                Else => 0,
+                While => 0,
+                Break => 0,
+                Continue => 0,
+                True => 0,
+                False => 0,
+                Ident => 0,
+                Int => 0,
+                Str => 0,
+                Symbol => 0,
+                Eof => 0,
+            };
+
+            count = count + 1 + score;
+        } else if is_digit(c) {
+            i = scan_number(data, i, len);
+            count = count + 1;
+        } else if c == (34 as u8) {
+            i = scan_string(data, i, len);
+            count = count + 1;
+        } else {
+            i = scan_symbol(data, i, len);
+            count = count + 1;
+        }
+    }
+
+    return count + 1;
+}
