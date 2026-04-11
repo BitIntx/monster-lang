@@ -169,6 +169,74 @@ fn scan_symbol(data: *u8, start: usize, len: usize) -> usize {
     return start + (1 as usize);
 }
 
+fn classify_symbol(data: *u8, start: usize, len: usize) -> TokenKind {
+    let c: u8 = data[start];
+
+    if start + (1 as usize) < len {
+        let next: u8 = data[start + (1 as usize)];
+
+        if c == (45 as u8) && next == (62 as u8) {
+            return Arrow;
+        } else if c == (61 as u8) && next == (62 as u8) {
+            return FatArrow;
+        } else if c == (61 as u8) && next == (61 as u8) {
+            return EqualEqual;
+        } else if c == (33 as u8) && next == (61 as u8) {
+            return BangEqual;
+        } else if c == (38 as u8) && next == (38 as u8) {
+            return AndAnd;
+        } else if c == (124 as u8) && next == (124 as u8) {
+            return OrOr;
+        } else if c == (60 as u8) && next == (61 as u8) {
+            return LessEqual;
+        } else if c == (62 as u8) && next == (61 as u8) {
+            return GreaterEqual;
+        }
+    }
+
+    if c == (46 as u8) {
+        return Dot;
+    } else if c == (58 as u8) {
+        return Colon;
+    } else if c == (44 as u8) {
+        return Comma;
+    } else if c == (59 as u8) {
+        return Semicolon;
+    } else if c == (91 as u8) {
+        return LBracket;
+    } else if c == (93 as u8) {
+        return RBracket;
+    } else if c == (40 as u8) {
+        return LParen;
+    } else if c == (41 as u8) {
+        return RParen;
+    } else if c == (123 as u8) {
+        return LBrace;
+    } else if c == (125 as u8) {
+        return RBrace;
+    } else if c == (61 as u8) {
+        return Equal;
+    } else if c == (33 as u8) {
+        return Bang;
+    } else if c == (38 as u8) {
+        return Amp;
+    } else if c == (43 as u8) {
+        return Plus;
+    } else if c == (45 as u8) {
+        return Minus;
+    } else if c == (42 as u8) {
+        return Star;
+    } else if c == (47 as u8) {
+        return Slash;
+    } else if c == (60 as u8) {
+        return Less;
+    } else if c == (62 as u8) {
+        return Greater;
+    }
+
+    return Slash;
+}
+
 fn lex(data: *u8, len: usize) -> TokenBuffer {
     let mut tokens: TokenBuffer = new_token_buffer(len + (1 as usize));
     let mut i: usize = 0 as usize;
@@ -218,8 +286,9 @@ fn lex(data: *u8, len: usize) -> TokenBuffer {
             let start: usize = i;
             let token_line: i32 = line;
             let token_column: i32 = column;
+            let kind: TokenKind = classify_symbol(data, i, len);
             i = scan_symbol(data, i, len);
-            tokens = push_token(tokens, make_token(Symbol, start, i - start, token_line, token_column));
+            tokens = push_token(tokens, make_token(kind, start, i - start, token_line, token_column));
             column = column + ((i - start) as i32);
         }
     }

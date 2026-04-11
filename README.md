@@ -131,7 +131,7 @@ To work on the extension locally, clone `monster-vscode`, open it in VS Code, an
 
 Monster now has its first self-hosting experiment under [`selfhost/`](./selfhost/).
 
-The current self-hosted slice is a Monster-written lexer prototype that reads source and builds a small token buffer:
+The current self-hosted slice is a Monster-written lexer prototype that reads source and builds a small token buffer with token kinds close to the Rust lexer:
 
 ```bash
 mst run selfhost/main.mnst -- exam.mnst
