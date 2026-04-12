@@ -1,0 +1,24 @@
+fn cleanup(label: str) -> void {
+    print_ln_str(label);
+    return;
+}
+
+fn main() -> i32 {
+    let mut i = 0;
+    defer cleanup("function");
+
+    while i < 2 {
+        defer cleanup("loop");
+
+        if i == 0 {
+            defer cleanup("continue");
+            i = i + 1;
+            continue;
+        }
+
+        defer cleanup("break");
+        break;
+    }
+
+    return i;
+}

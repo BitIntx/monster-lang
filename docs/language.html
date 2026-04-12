@@ -80,14 +80,14 @@ y = y + x;</code></pre>
 
           <section class="section" id="defer">
             <h2>Defer</h2>
-            <p><code>defer</code> registers a function-body-scope cleanup expression that runs before the function returns. Deferred expressions run in last-in, first-out order.</p>
+            <p><code>defer</code> registers a scope cleanup expression. Deferred expressions run in last-in, first-out order before the current block exits, including <code>return</code>, <code>break</code>, and <code>continue</code> paths.</p>
             <pre><code>let data = read_file(path, &amp;len);
 defer free(data);
 
 return 0;</code></pre>
             <ul>
               <li>Deferred expressions must have type <code>void</code>.</li>
-              <li>The current implementation supports <code>defer</code> at function body scope.</li>
+              <li>Nested blocks have their own defer stacks.</li>
             </ul>
           </section>
 

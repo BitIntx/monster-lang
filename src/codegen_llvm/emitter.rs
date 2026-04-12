@@ -14,6 +14,11 @@ struct LocalVar {
     ty: Type,
 }
 
+struct Scope {
+    locals: HashMap<String, LocalVar>,
+    deferred: Vec<Expr>,
+}
+
 #[derive(Clone)]
 struct Value {
     repr: String,
@@ -30,6 +35,7 @@ struct Place {
 struct LoopLabels {
     continue_label: String,
     break_label: String,
+    scope_depth: usize,
 }
 
 pub(super) struct FunctionEmitter<'a> {
@@ -42,9 +48,8 @@ pub(super) struct FunctionEmitter<'a> {
     string_literals: &'a HashMap<String, StringLiteralData>,
     entry_allocas: Vec<String>,
     body_lines: Vec<String>,
-    scopes: Vec<HashMap<String, LocalVar>>,
+    scopes: Vec<Scope>,
     loop_stack: Vec<LoopLabels>,
-    deferred: Vec<Expr>,
     temp_counter: usize,
     label_counter: usize,
     slot_counter: usize,
@@ -74,7 +79,6 @@ impl<'a> FunctionEmitter<'a> {
             body_lines: Vec::new(),
             scopes: Vec::new(),
             loop_stack: Vec::new(),
-            deferred: Vec::new(),
             temp_counter: 0,
             label_counter: 0,
             slot_counter: 0,
@@ -106,11 +110,11 @@ impl<'a> FunctionEmitter<'a> {
         }
 
         self.emit_stmts(body, false)?;
-        self.exit_scope();
-
         if !self.terminated {
             self.emit_default_return()?;
         }
+
+        self.exit_scope();
 
         let params = self
             .function
@@ -158,6 +162,9 @@ impl<'a> FunctionEmitter<'a> {
         }
 
         if new_scope {
+            if !self.terminated {
+                self.emit_current_scope_deferred()?;
+            }
             self.exit_scope();
         }
 
@@ -224,6 +231,7 @@ impl<'a> FunctionEmitter<'a> {
                     .last()
                     .cloned()
                     .ok_or_else(|| "internal error: break used outside of loop".to_string())?;
+                self.emit_deferred_until(labels.scope_depth)?;
                 self.emit_terminator(format!("br label %{}", labels.break_label));
                 Ok(())
             }
@@ -232,21 +240,22 @@ impl<'a> FunctionEmitter<'a> {
                     self.loop_stack.last().cloned().ok_or_else(|| {
                         "internal error: continue used outside of loop".to_string()
                     })?;
+                self.emit_deferred_until(labels.scope_depth)?;
                 self.emit_terminator(format!("br label %{}", labels.continue_label));
                 Ok(())
             }
             Stmt::Defer { expr } => {
-                self.deferred.push(expr.clone());
+                self.defer_in_current_scope(expr.clone())?;
                 Ok(())
             }
             Stmt::Return(Some(expr)) => {
                 let value = self.emit_expr(expr)?;
-                self.emit_deferred()?;
+                self.emit_all_deferred()?;
                 self.emit_terminator(format!("ret {} {}", self.llvm_type(&value.ty), value.repr));
                 Ok(())
             }
             Stmt::Return(None) => {
-                self.emit_deferred()?;
+                self.emit_all_deferred()?;
                 self.emit_terminator("ret void".to_string());
                 Ok(())
             }
@@ -321,6 +330,7 @@ impl<'a> FunctionEmitter<'a> {
         self.loop_stack.push(LoopLabels {
             continue_label: cond_label.clone(),
             break_label: end_label.clone(),
+            scope_depth: self.scopes.len(),
         });
         self.emit_stmts(body, true)?;
         self.loop_stack.pop();
@@ -1516,7 +1526,7 @@ impl<'a> FunctionEmitter<'a> {
     }
 
     fn emit_default_return(&mut self) -> Result<(), String> {
-        self.emit_deferred()?;
+        self.emit_all_deferred()?;
 
         match &self.function.ret_type {
             Type::I32 => self.emit_terminator("ret i32 0".to_string()),
@@ -1544,8 +1554,35 @@ impl<'a> FunctionEmitter<'a> {
         Ok(())
     }
 
-    fn emit_deferred(&mut self) -> Result<(), String> {
-        let deferred = self.deferred.clone();
+    fn emit_current_scope_deferred(&mut self) -> Result<(), String> {
+        let scope_depth = self
+            .scopes
+            .len()
+            .checked_sub(1)
+            .ok_or_else(|| "internal error: missing scope".to_string())?;
+        self.emit_deferred_until(scope_depth)
+    }
+
+    fn emit_all_deferred(&mut self) -> Result<(), String> {
+        self.emit_deferred_until(0)
+    }
+
+    fn emit_deferred_until(&mut self, keep_scope_depth: usize) -> Result<(), String> {
+        let deferred_scopes = self
+            .scopes
+            .iter()
+            .skip(keep_scope_depth)
+            .map(|scope| scope.deferred.clone())
+            .collect::<Vec<_>>();
+
+        for deferred in deferred_scopes.iter().rev() {
+            self.emit_deferred_list(deferred)?;
+        }
+
+        Ok(())
+    }
+
+    fn emit_deferred_list(&mut self, deferred: &[Expr]) -> Result<(), String> {
         for expr in deferred.iter().rev() {
             let value = self.emit_expr(expr)?;
             if value.ty != Type::Void {
@@ -1760,12 +1797,24 @@ impl<'a> FunctionEmitter<'a> {
             .scopes
             .last_mut()
             .ok_or_else(|| "internal error: missing scope".to_string())?;
-        scope.insert(name.to_string(), LocalVar { ptr, ty });
+        scope.locals.insert(name.to_string(), LocalVar { ptr, ty });
         Ok(())
     }
 
     fn lookup_local(&self, name: &str) -> Option<&LocalVar> {
-        self.scopes.iter().rev().find_map(|scope| scope.get(name))
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.locals.get(name))
+    }
+
+    fn defer_in_current_scope(&mut self, expr: Expr) -> Result<(), String> {
+        let scope = self
+            .scopes
+            .last_mut()
+            .ok_or_else(|| "internal error: missing scope".to_string())?;
+        scope.deferred.push(expr);
+        Ok(())
     }
 
     fn emit_line(&mut self, line: String) {
@@ -1788,7 +1837,10 @@ impl<'a> FunctionEmitter<'a> {
     }
 
     fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Scope {
+            locals: HashMap::new(),
+            deferred: Vec::new(),
+        });
     }
 
     fn exit_scope(&mut self) {

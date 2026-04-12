@@ -204,7 +204,7 @@ Supported language features:
 - `let mut name = expr;`
 - `return`
 - `return;`
-- `defer expr;` for function-body-scope cleanup calls
+- `defer expr;` for scope cleanup calls
 - `main(argc: i32, argv: **u8)` entry arguments
 - `enum Name { Variant, Payload(Type), ... }`
 - `match`
@@ -417,6 +417,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 - [`exam.mnst`](./exam.mnst): a Hello, World! starting point with comments summarizing the rest of the current language surface
 - [`examples/argv.mnst`](./examples/argv.mnst): `main(argc, argv)` plus forwarded CLI arguments
 - [`examples/constants.mnst`](./examples/constants.mnst): global `const` declarations for scalar and string values
+- [`examples/defer_scope.mnst`](./examples/defer_scope.mnst): scoped `defer` cleanup across block exit, `continue`, `break`, and `return`
 - [`examples/enum.mnst`](./examples/enum.mnst): payload-free enums and enum comparison
 - [`examples/file_io.mnst`](./examples/file_io.mnst): file reading and writing with `read_file` / `write_file`
 - [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst): a manual growable vector built with raw pointers and libc allocation

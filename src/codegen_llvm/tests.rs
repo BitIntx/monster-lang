@@ -90,6 +90,114 @@ fn emits_deferred_calls_before_return_in_lifo_order() {
 }
 
 #[test]
+fn emits_nested_deferred_calls_at_block_exit() {
+    let ir = emit_source(
+        r#"
+        extern fn cleanup(value: i32) -> void;
+
+        fn main() -> i32 {
+            if true {
+                defer cleanup(1);
+                defer cleanup(2);
+            }
+
+            return 0;
+        }
+        "#,
+    );
+
+    let cleanup_two = ir
+        .find("call void @cleanup(i32 2)")
+        .expect("expected nested cleanup(2)");
+    let cleanup_one = ir
+        .find("call void @cleanup(i32 1)")
+        .expect("expected nested cleanup(1)");
+    let branch_to_end = ir[cleanup_one..]
+        .find("br label %if.end.")
+        .expect("expected branch after block cleanup")
+        + cleanup_one;
+
+    assert!(cleanup_two < cleanup_one);
+    assert!(cleanup_one < branch_to_end);
+}
+
+#[test]
+fn emits_all_active_deferred_calls_before_nested_return() {
+    let ir = emit_source(
+        r#"
+        extern fn cleanup(value: i32) -> void;
+
+        fn main() -> i32 {
+            defer cleanup(1);
+
+            if true {
+                defer cleanup(2);
+                return 0;
+            }
+
+            return 1;
+        }
+        "#,
+    );
+
+    let cleanup_two = ir
+        .find("call void @cleanup(i32 2)")
+        .expect("expected inner cleanup before return");
+    let cleanup_one = ir
+        .find("call void @cleanup(i32 1)")
+        .expect("expected outer cleanup before return");
+    let ret = ir.find("ret i32 0").expect("expected nested return");
+
+    assert!(cleanup_two < cleanup_one);
+    assert!(cleanup_one < ret);
+}
+
+#[test]
+fn emits_deferred_calls_before_break_and_continue() {
+    let ir = emit_source(
+        r#"
+        extern fn cleanup(value: i32) -> void;
+
+        fn main() -> i32 {
+            let mut i: i32 = 0;
+
+            while i < 2 {
+                defer cleanup(1);
+
+                if i == 0 {
+                    i = i + 1;
+                    continue;
+                }
+
+                break;
+            }
+
+            return i;
+        }
+        "#,
+    );
+
+    let cleanup_one = ir
+        .find("call void @cleanup(i32 1)")
+        .expect("expected cleanup before continue");
+    let continue_branch = ir[cleanup_one..]
+        .find("br label %while.cond.")
+        .expect("expected continue branch after cleanup")
+        + cleanup_one;
+    let cleanup_two = ir[continue_branch..]
+        .find("call void @cleanup(i32 1)")
+        .expect("expected cleanup before break")
+        + continue_branch;
+    let break_branch = ir[cleanup_two..]
+        .find("br label %while.end.")
+        .expect("expected break branch after cleanup")
+        + cleanup_two;
+
+    assert!(cleanup_one < continue_branch);
+    assert!(cleanup_two < break_branch);
+}
+
+#[test]
 fn sanitizes_namespaced_function_symbols() {
     let program = Program {
         imports: Vec::new(),
