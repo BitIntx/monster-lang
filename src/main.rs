@@ -1259,6 +1259,9 @@ fn rewrite_stmt(
         ast::Stmt::Return(expr) => ast::Stmt::Return(
             expr.map(|expr| rewrite_expr(expr, module_aliases, visible_functions)),
         ),
+        ast::Stmt::Defer { expr } => ast::Stmt::Defer {
+            expr: rewrite_expr(expr, module_aliases, visible_functions),
+        },
         ast::Stmt::Break | ast::Stmt::Continue => stmt,
     }
 }
@@ -1961,6 +1964,7 @@ mod tests {
             let mut value: i32 = (sizeof(Pair) + LIMIT) as i32;
             value = value + 10 - 3 * 2 / 1;
             let ptr: *i32 = &value;
+            defer print_ln_str("done");
 
             if value >= 10 && argc != 0 {
                 print_str("value\t");
@@ -2071,6 +2075,7 @@ mod tests {
             TokenKind::While => 14,
             TokenKind::Break => 15,
             TokenKind::Continue => 16,
+            TokenKind::Defer => 51,
             TokenKind::True => 17,
             TokenKind::False => 18,
             TokenKind::Arrow => 19,

@@ -99,6 +99,8 @@ fn classify_identifier(data: *u8, start: usize, len: usize) -> TokenKind {
         return Break;
     } else if keyword_eq(data, start, len, "continue") {
         return Continue;
+    } else if keyword_eq(data, start, len, "defer") {
+        return Defer;
     } else if keyword_eq(data, start, len, "true") {
         return True;
     } else if keyword_eq(data, start, len, "false") {

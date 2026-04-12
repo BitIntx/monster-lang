@@ -103,6 +103,7 @@ impl Lexer {
             "while" => TokenKind::While,
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
+            "defer" => TokenKind::Defer,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             _ => TokenKind::Ident,

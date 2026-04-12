@@ -43,6 +43,7 @@ fn vec_i32_free(vec: VecI32) -> void {
 
 fn main() -> i32 {
     let mut vec: VecI32 = vec_i32_new();
+    defer vec_i32_free(vec);
 
     vec_i32_push(&vec, 10);
     vec_i32_push(&vec, 20);
@@ -55,6 +56,5 @@ fn main() -> i32 {
     print_ln_i32(vec_i32_get(vec, 4));
 
     let result: i32 = vec_i32_get(vec, 0) + vec_i32_get(vec, 4);
-    vec_i32_free(vec);
     return result;
 }

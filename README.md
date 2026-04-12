@@ -204,6 +204,7 @@ Supported language features:
 - `let mut name = expr;`
 - `return`
 - `return;`
+- `defer expr;` for function-body-scope cleanup calls
 - `main(argc: i32, argv: **u8)` entry arguments
 - `enum Name { Variant, Payload(Type), ... }`
 - `match`
@@ -328,7 +329,7 @@ extern fn realloc(ptr: *i32, size: i32) -> *i32;
 extern fn free(ptr: *i32) -> void;
 ```
 
-See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that grows with `malloc` / `realloc` / `free`, and [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) for the raw LLVM IR emitted by the current compiler.
+See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that grows with `malloc` / `realloc` / `free` and uses `defer` for cleanup, and [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) for the raw LLVM IR emitted by the current compiler.
 
 Monster also supports file-based imports plus loop control. If you save this snippet at the repository root, it can import the checked-in helper at [`examples/imports/math.mnst`](./examples/imports/math.mnst):
 

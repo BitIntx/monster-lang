@@ -385,6 +385,8 @@ impl Parser {
             self.parse_break_stmt()
         } else if self.at(TokenKind::Continue) {
             self.parse_continue_stmt()
+        } else if self.at(TokenKind::Defer) {
+            self.parse_defer_stmt()
         } else if self.at(TokenKind::Star) {
             self.parse_assign_deref_stmt()
         } else if self.at_index_assign_start() {
@@ -544,6 +546,13 @@ impl Parser {
         self.expect(TokenKind::Continue)?;
         self.expect(TokenKind::Semicolon)?;
         Ok(Stmt::Continue)
+    }
+
+    fn parse_defer_stmt(&mut self) -> Result<Stmt, String> {
+        self.expect(TokenKind::Defer)?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Semicolon)?;
+        Ok(Stmt::Defer { expr })
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
@@ -1226,6 +1235,34 @@ mod tests {
                 mutable: true,
                 value: Expr::Binary { op: BinOp::Add, .. },
             } if name == "y"
+        ));
+    }
+
+    #[test]
+    fn parses_defer_statement() {
+        let program = parse_source(
+            r#"
+            fn cleanup(value: i32) -> void {
+                return;
+            }
+
+            fn main() -> i32 {
+                defer cleanup(1);
+                return 0;
+            }
+            "#,
+        );
+
+        let body = program.functions[1]
+            .body
+            .as_ref()
+            .expect("expected function body");
+
+        assert!(matches!(
+            &body[0],
+            Stmt::Defer {
+                expr: Expr::Call { name, args },
+            } if name == "cleanup" && matches!(args.as_slice(), [Expr::Int(1)])
         ));
     }
 

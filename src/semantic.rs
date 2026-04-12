@@ -50,6 +50,7 @@ struct Analyzer {
     scopes: Vec<HashMap<String, VarInfo>>,
     current_return_type: Option<Type>,
     loop_depth: usize,
+    nested_block_depth: usize,
 }
 
 impl Analyzer {
@@ -63,6 +64,7 @@ impl Analyzer {
             scopes: Vec::new(),
             current_return_type: None,
             loop_depth: 0,
+            nested_block_depth: 0,
         };
         analyzer.install_builtins();
         analyzer
@@ -256,6 +258,7 @@ impl Analyzer {
         self.scopes.clear();
         self.current_return_type = Some(func.ret_type.clone());
         self.loop_depth = 0;
+        self.nested_block_depth = 0;
         self.enter_scope();
 
         for (name, ty) in &func.params {
@@ -434,6 +437,16 @@ impl Analyzer {
                     Ok(())
                 }
             }
+            Stmt::Defer { expr } => {
+                if self.nested_block_depth != 0 {
+                    return Err(
+                        "defer is only supported at function body scope for now".to_string()
+                    );
+                }
+
+                let expr_ty = self.analyze_expr(expr)?;
+                self.expect_type(&expr_ty, &Type::Void, "defer expression")
+            }
             Stmt::Return(expr) => {
                 let expected = self
                     .current_return_type
@@ -466,13 +479,13 @@ impl Analyzer {
 
     fn analyze_nested_block(&mut self, stmts: &[Stmt]) -> Result<(), String> {
         self.enter_scope();
+        self.nested_block_depth += 1;
 
-        for stmt in stmts {
-            self.analyze_stmt(stmt)?;
-        }
+        let result = stmts.iter().try_for_each(|stmt| self.analyze_stmt(stmt));
 
+        self.nested_block_depth -= 1;
         self.exit_scope();
-        Ok(())
+        result
     }
 
     fn analyze_expr(&mut self, expr: &Expr) -> Result<Type, String> {
@@ -1358,7 +1371,8 @@ fn stmt_guarantees_return(stmt: &Stmt) -> bool {
         | Stmt::AssignDeref { .. }
         | Stmt::Expr(_)
         | Stmt::Break
-        | Stmt::Continue => false,
+        | Stmt::Continue
+        | Stmt::Defer { .. } => false,
     }
 }
 
@@ -1463,6 +1477,69 @@ mod tests {
         assert!(matches!(
             result,
             Err(message) if message.contains("inferred local variable cannot have type void")
+        ));
+    }
+
+    #[test]
+    fn accepts_top_level_defer_void_expression() {
+        let result = analyze_source(
+            r#"
+            fn cleanup(value: i32) -> void {
+                return;
+            }
+
+            fn main() -> i32 {
+                defer cleanup(1);
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_defer_non_void_expression() {
+        let result = analyze_source(
+            r#"
+            fn value() -> i32 {
+                return 1;
+            }
+
+            fn main() -> i32 {
+                defer value();
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("defer expression has type i32, expected void")
+        ));
+    }
+
+    #[test]
+    fn rejects_nested_defer_for_now() {
+        let result = analyze_source(
+            r#"
+            fn cleanup() -> void {
+                return;
+            }
+
+            fn main() -> i32 {
+                if true {
+                    defer cleanup();
+                }
+
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("defer is only supported at function body scope")
         ));
     }
 

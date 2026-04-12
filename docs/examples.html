@@ -52,7 +52,7 @@
 
           <article class="card">
             <h3><code>examples/file_io.mnst</code></h3>
-            <p>Reads a file into memory, prints its size, and writes a copy back out.</p>
+            <p>Reads a file into memory, defers cleanup, prints its size, and writes a copy back out.</p>
             <pre><code>mst run examples/file_io.mnst -- exam.mnst</code></pre>
           </article>
 
@@ -88,7 +88,7 @@
 
           <article class="card">
             <h3><code>examples/growable_vec_i32.mnst</code></h3>
-            <p>Shows a manual growable vector built with <code>malloc</code>, <code>realloc</code>, and <code>free</code>.</p>
+            <p>Shows a manual growable vector built with <code>malloc</code>, <code>realloc</code>, <code>free</code>, and <code>defer</code>.</p>
             <pre><code>mst run examples/growable_vec_i32.mnst</code></pre>
           </article>
 

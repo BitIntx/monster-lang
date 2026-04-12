@@ -44,6 +44,7 @@ pub(super) struct FunctionEmitter<'a> {
     body_lines: Vec<String>,
     scopes: Vec<HashMap<String, LocalVar>>,
     loop_stack: Vec<LoopLabels>,
+    deferred: Vec<Expr>,
     temp_counter: usize,
     label_counter: usize,
     slot_counter: usize,
@@ -73,6 +74,7 @@ impl<'a> FunctionEmitter<'a> {
             body_lines: Vec::new(),
             scopes: Vec::new(),
             loop_stack: Vec::new(),
+            deferred: Vec::new(),
             temp_counter: 0,
             label_counter: 0,
             slot_counter: 0,
@@ -107,7 +109,7 @@ impl<'a> FunctionEmitter<'a> {
         self.exit_scope();
 
         if !self.terminated {
-            self.emit_default_return();
+            self.emit_default_return()?;
         }
 
         let params = self
@@ -233,12 +235,18 @@ impl<'a> FunctionEmitter<'a> {
                 self.emit_terminator(format!("br label %{}", labels.continue_label));
                 Ok(())
             }
+            Stmt::Defer { expr } => {
+                self.deferred.push(expr.clone());
+                Ok(())
+            }
             Stmt::Return(Some(expr)) => {
                 let value = self.emit_expr(expr)?;
+                self.emit_deferred()?;
                 self.emit_terminator(format!("ret {} {}", self.llvm_type(&value.ty), value.repr));
                 Ok(())
             }
             Stmt::Return(None) => {
+                self.emit_deferred()?;
                 self.emit_terminator("ret void".to_string());
                 Ok(())
             }
@@ -1507,7 +1515,9 @@ impl<'a> FunctionEmitter<'a> {
         Ok(())
     }
 
-    fn emit_default_return(&mut self) {
+    fn emit_default_return(&mut self) -> Result<(), String> {
+        self.emit_deferred()?;
+
         match &self.function.ret_type {
             Type::I32 => self.emit_terminator("ret i32 0".to_string()),
             Type::U8 => self.emit_terminator("ret i8 0".to_string()),
@@ -1530,6 +1540,20 @@ impl<'a> FunctionEmitter<'a> {
                 self.llvm_type(&self.function.ret_type)
             )),
         }
+
+        Ok(())
+    }
+
+    fn emit_deferred(&mut self) -> Result<(), String> {
+        let deferred = self.deferred.clone();
+        for expr in deferred.iter().rev() {
+            let value = self.emit_expr(expr)?;
+            if value.ty != Type::Void {
+                return Err("internal error: defer expression must have type void".to_string());
+            }
+        }
+
+        Ok(())
     }
 
     fn emit_place(&mut self, expr: &Expr) -> Result<Place, String> {

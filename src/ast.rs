@@ -129,6 +129,9 @@ pub enum Stmt {
     },
     Break,
     Continue,
+    Defer {
+        expr: Expr,
+    },
     Return(Option<Expr>),
 }
 

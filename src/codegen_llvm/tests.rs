@@ -64,6 +64,32 @@ fn emits_inferred_local_types() {
 }
 
 #[test]
+fn emits_deferred_calls_before_return_in_lifo_order() {
+    let ir = emit_source(
+        r#"
+        extern fn cleanup(value: i32) -> void;
+
+        fn main() -> i32 {
+            defer cleanup(1);
+            defer cleanup(2);
+            return 0;
+        }
+        "#,
+    );
+
+    let cleanup_two = ir
+        .find("call void @cleanup(i32 2)")
+        .expect("expected deferred cleanup(2)");
+    let cleanup_one = ir
+        .find("call void @cleanup(i32 1)")
+        .expect("expected deferred cleanup(1)");
+    let ret = ir.find("ret i32 0").expect("expected return");
+
+    assert!(cleanup_two < cleanup_one);
+    assert!(cleanup_one < ret);
+}
+
+#[test]
 fn sanitizes_namespaced_function_symbols() {
     let program = Program {
         imports: Vec::new(),

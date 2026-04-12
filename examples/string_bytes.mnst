@@ -5,6 +5,7 @@ fn main() -> i32 {
     let src: str = "Monster";
     let len: usize = strlen(src);
     let buf: *u8 = calloc(len + (1 as usize), sizeof(u8));
+    defer free(buf);
 
     memcpy(buf, src as *u8, len + (1 as usize));
 
@@ -14,6 +15,5 @@ fn main() -> i32 {
 
     print_ln_i32(memcmp(buf, src as *u8, len));
 
-    free(buf);
     return len as i32;
 }

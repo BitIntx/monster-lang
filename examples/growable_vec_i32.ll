@@ -5,13 +5,31 @@ target triple = "x86_64-pc-linux-gnu"
 @.fmt.print_ln_i32 = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 @.fmt.print_str = private unnamed_addr constant [3 x i8] c"%s\00"
 @.fmt.scan_i32 = private unnamed_addr constant [3 x i8] c"%d\00"
+@.file.mode.read = private unnamed_addr constant [3 x i8] c"rb\00"
+@.file.mode.write = private unnamed_addr constant [3 x i8] c"wb\00"
 @.str.true = private unnamed_addr constant [5 x i8] c"true\00"
 @.str.false = private unnamed_addr constant [6 x i8] c"false\00"
 @.str.read_i32_error = private unnamed_addr constant [42 x i8] c"Monster runtime error: expected i32 input\00"
+@.str.file_open_error = private unnamed_addr constant [43 x i8] c"Monster runtime error: failed to open file\00"
+@.str.file_seek_error = private unnamed_addr constant [43 x i8] c"Monster runtime error: failed to seek file\00"
+@.str.file_alloc_error = private unnamed_addr constant [54 x i8] c"Monster runtime error: failed to allocate file buffer\00"
+@.str.file_read_error = private unnamed_addr constant [43 x i8] c"Monster runtime error: failed to read file\00"
+@.str.file_write_error = private unnamed_addr constant [44 x i8] c"Monster runtime error: failed to write file\00"
+@.str.enum_payload_error = private unnamed_addr constant [49 x i8] c"Monster runtime error: wrong enum payload access\00"
 
 declare i32 @printf(ptr, ...)
 declare i32 @puts(ptr)
 declare i32 @scanf(ptr, ...)
+declare ptr @fopen(ptr, ptr)
+declare i32 @fclose(ptr)
+declare i32 @fseek(ptr, i64, i32)
+declare i64 @ftell(ptr)
+declare i64 @fread(ptr, i64, i64, ptr)
+declare i64 @fwrite(ptr, i64, i64, ptr)
+declare ptr @calloc(i64, i64)
+declare i64 @strlen(ptr)
+declare i32 @memcmp(ptr, ptr, i64)
+declare ptr @memcpy(ptr, ptr, i64)
 declare void @exit(i32)
 
 define internal void @__monster_builtin_print_i32(i32 %value) {
@@ -67,6 +85,127 @@ read.fail:
 read.ok:
   %value.0 = load i32, ptr %value.addr
   ret i32 %value.0
+}
+
+define internal ptr @__monster_builtin_read_file(ptr %path, ptr %out_len) {
+entry:
+  %file.0 = call ptr @fopen(ptr %path, ptr getelementptr inbounds ([3 x i8], ptr @.file.mode.read, i64 0, i64 0))
+  %file.ok = icmp ne ptr %file.0, null
+  br i1 %file.ok, label %seek.end, label %open.fail
+
+open.fail:
+  %call.open = call i32 @puts(ptr getelementptr inbounds ([43 x i8], ptr @.str.file_open_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+seek.end:
+  %seek.end.result = call i32 @fseek(ptr %file.0, i64 0, i32 2)
+  %seek.end.ok = icmp eq i32 %seek.end.result, 0
+  br i1 %seek.end.ok, label %tell, label %seek.fail
+
+tell:
+  %size.0 = call i64 @ftell(ptr %file.0)
+  %size.ok = icmp sge i64 %size.0, 0
+  br i1 %size.ok, label %rewind, label %seek.fail
+
+rewind:
+  %seek.start.result = call i32 @fseek(ptr %file.0, i64 0, i32 0)
+  %seek.start.ok = icmp eq i32 %seek.start.result, 0
+  br i1 %seek.start.ok, label %alloc, label %seek.fail
+
+alloc:
+  %alloc.size = add i64 %size.0, 1
+  %buffer.0 = call ptr @calloc(i64 1, i64 %alloc.size)
+  %buffer.ok = icmp ne ptr %buffer.0, null
+  br i1 %buffer.ok, label %read, label %alloc.fail
+
+alloc.fail:
+  %close.alloc = call i32 @fclose(ptr %file.0)
+  %call.alloc = call i32 @puts(ptr getelementptr inbounds ([54 x i8], ptr @.str.file_alloc_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+read:
+  %bytes.read = call i64 @fread(ptr %buffer.0, i64 1, i64 %size.0, ptr %file.0)
+  %read.ok = icmp eq i64 %bytes.read, %size.0
+  br i1 %read.ok, label %finish, label %read.fail
+
+seek.fail:
+  %close.seek = call i32 @fclose(ptr %file.0)
+  %call.seek = call i32 @puts(ptr getelementptr inbounds ([43 x i8], ptr @.str.file_seek_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+read.fail:
+  %close.read = call i32 @fclose(ptr %file.0)
+  %call.read = call i32 @puts(ptr getelementptr inbounds ([43 x i8], ptr @.str.file_read_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+finish:
+  %close.finish = call i32 @fclose(ptr %file.0)
+  store i64 %size.0, ptr %out_len
+  ret ptr %buffer.0
+}
+
+define internal void @__monster_builtin_write_file(ptr %path, ptr %data, i64 %len) {
+entry:
+  %file.1 = call ptr @fopen(ptr %path, ptr getelementptr inbounds ([3 x i8], ptr @.file.mode.write, i64 0, i64 0))
+  %file.ok = icmp ne ptr %file.1, null
+  br i1 %file.ok, label %write, label %write.fail
+
+write.fail:
+  %call.open = call i32 @puts(ptr getelementptr inbounds ([44 x i8], ptr @.str.file_write_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+write:
+  %bytes.written = call i64 @fwrite(ptr %data, i64 1, i64 %len, ptr %file.1)
+  %close.write = call i32 @fclose(ptr %file.1)
+  %write.ok = icmp eq i64 %bytes.written, %len
+  br i1 %write.ok, label %done, label %write.error
+
+write.error:
+  %call.write = call i32 @puts(ptr getelementptr inbounds ([44 x i8], ptr @.str.file_write_error, i64 0, i64 0))
+  call void @exit(i32 1)
+  unreachable
+
+done:
+  ret void
+}
+
+define internal i64 @__monster_builtin_strlen(ptr %value) {
+entry:
+  %len.0 = call i64 @strlen(ptr %value)
+  ret i64 %len.0
+}
+
+define internal i32 @__monster_builtin_memcmp(ptr %lhs, ptr %rhs, i64 %len) {
+entry:
+  %cmp.0 = call i32 @memcmp(ptr %lhs, ptr %rhs, i64 %len)
+  ret i32 %cmp.0
+}
+
+define internal void @__monster_builtin_memcpy(ptr %dst, ptr %src, i64 %len) {
+entry:
+  %copy.0 = call ptr @memcpy(ptr %dst, ptr %src, i64 %len)
+  ret void
+}
+
+define internal i1 @__monster_builtin_str_eq(ptr %lhs, ptr %rhs) {
+entry:
+  %lhs.len = call i64 @strlen(ptr %lhs)
+  %rhs.len = call i64 @strlen(ptr %rhs)
+  %same.len = icmp eq i64 %lhs.len, %rhs.len
+  br i1 %same.len, label %compare, label %not.equal
+
+compare:
+  %cmp.1 = call i32 @memcmp(ptr %lhs, ptr %rhs, i64 %lhs.len)
+  %same.bytes = icmp eq i32 %cmp.1, 0
+  ret i1 %same.bytes
+
+not.equal:
+  ret i1 0
 }
 %struct.VecI32 = type { ptr, i32, i32 }
 
@@ -191,9 +330,9 @@ entry:
   %call.10 = call i32 @vec_i32_get(%struct.VecI32 %load.9, i32 4)
   %bin.11 = add i32 %call.8, %call.10
   store i32 %bin.11, ptr %result.addr.1
-  %load.12 = load %struct.VecI32, ptr %vec.addr.0
-  call void @vec_i32_free(%struct.VecI32 %load.12)
-  %load.13 = load i32, ptr %result.addr.1
-  ret i32 %load.13
+  %load.12 = load i32, ptr %result.addr.1
+  %load.13 = load %struct.VecI32, ptr %vec.addr.0
+  call void @vec_i32_free(%struct.VecI32 %load.13)
+  ret i32 %load.12
 }
 
