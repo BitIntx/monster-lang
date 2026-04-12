@@ -33,6 +33,37 @@ fn emits_function_and_arithmetic_ir() {
 }
 
 #[test]
+fn emits_inferred_local_types() {
+    let ir = emit_source(
+        r#"
+        struct Pair {
+            left: i32,
+            right: i32,
+        }
+
+        enum Token {
+            Int(i32),
+            Eof,
+        }
+
+        fn main() -> i32 {
+            let x = 10;
+            let pair = Pair { left: x, right: 20 };
+            let token = Int(pair.left);
+            let mut values = [x, payload(token, Int)];
+            values[1] = pair.right;
+            return values[0] + values[1];
+        }
+        "#,
+    );
+
+    assert!(ir.contains("%struct.Pair = type { i32, i32 }"));
+    assert!(ir.contains("%enum.Token = type { i32, i32"));
+    assert!(ir.contains("alloca [2 x i32]"));
+    assert!(ir.contains("store i32 10, ptr %x.addr."));
+}
+
+#[test]
 fn sanitizes_namespaced_function_symbols() {
     let program = Program {
         imports: Vec::new(),

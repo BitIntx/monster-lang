@@ -154,7 +154,10 @@ The VS Code extension now lives in the separate [`monster-vscode`](https://githu
 It currently provides:
 
 - `.mnst` file association
+- `Monster.toml` file association
 - syntax highlighting
+- hover help
+- autocomplete suggestions
 - comment and bracket rules
 - starter snippets
 - a Monster language icon for themes that do not already define one
@@ -196,12 +199,15 @@ Supported language features:
 - `fn`
 - `extern fn`
 - `const NAME: Type = expr;`
-- `let`
-- `let mut`
+- `let name: Type = expr;`
+- `let name = expr;`
+- `let mut name = expr;`
 - `return`
 - `return;`
 - `main(argc: i32, argv: **u8)` entry arguments
-- `enum Name { Variant, ... }`
+- `enum Name { Variant, Payload(Type), ... }`
+- `match`
+- payload enum helpers: `is(value, Variant)` and `payload(value, Variant)`
 - `if` / `else`
 - `while`
 - `break`
@@ -255,14 +261,14 @@ struct Pair {
 extern fn abs(value: i32) -> i32;
 
 fn main() -> i32 {
-    let pair: Pair = Pair { left: 10, right: 20 };
-    let mut values: [i32; 3] = [pair.left, abs(-7), 30];
-    values[1] = len(values);
+    let pair = Pair { left: 10, right: 20 };
+    let mut values = [pair.left, abs(-7), 30];
+    values[1] = len(values) as i32;
     return values[0] + values[1];
 }
 ```
 
-Monster now also has payload-free enums with C-like variants:
+Monster supports payload-free enums with C-like variants:
 
 ```mnst
 enum Color {
@@ -273,6 +279,24 @@ enum Color {
 
 fn is_red(color: Color) -> bool {
     return color == Red;
+}
+```
+
+Payload enums can also be matched directly:
+
+```mnst
+enum Token {
+    Int(i32),
+    Name(str),
+    Eof,
+}
+
+fn token_value(token: Token) -> i32 {
+    return match token {
+        Int(value) => value,
+        Name(_) => 0,
+        Eof => -1,
+    };
 }
 ```
 
@@ -306,10 +330,10 @@ extern fn free(ptr: *i32) -> void;
 
 See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that grows with `malloc` / `realloc` / `free`, and [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) for the raw LLVM IR emitted by the current compiler.
 
-Monster also supports file-based imports plus loop control:
+Monster also supports file-based imports plus loop control. If you save this snippet at the repository root, it can import the checked-in helper at [`examples/imports/math.mnst`](./examples/imports/math.mnst):
 
 ```mnst
-import "math.mnst" as math;
+import "examples/imports/math.mnst" as math;
 
 fn main() -> i32 {
     let mut i: i32 = 0;
@@ -405,7 +429,6 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 
 Near-term goals:
 
-- payload-carrying enums / tagged unions
 - namespaced types and broader module imports beyond function-level aliasing
 - more complete libc and memory utilities
 - growable vectors beyond the current manual `VecI32` pattern

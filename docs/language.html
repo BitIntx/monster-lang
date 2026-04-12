@@ -65,13 +65,14 @@
             <p>Global constants use <code>const</code>. Local bindings use <code>let</code>, and reassignment requires <code>mut</code>.</p>
             <pre><code>const LIMIT: usize = 64 as usize;
 
-let x: i32 = 10;
-let mut y: i32 = 20;
+let x = 10;
+let mut y = 20;
 y = y + x;</code></pre>
             <ul>
               <li>Constants live at the top level and are inlined into function bodies.</li>
               <li>Constant initializers currently support compile-time scalar expressions such as literals, arithmetic, casts, booleans, strings, and <code>sizeof(T)</code>.</li>
-              <li>Local variable declarations are typed explicitly.</li>
+              <li>Local variable declarations can infer their type from the initializer.</li>
+              <li>Use <code>let name: Type = expr;</code> when you want the type written explicitly.</li>
               <li>Immutable variables reject assignment in semantic analysis.</li>
               <li>Array element, struct field, and dereference assignment are supported.</li>
             </ul>

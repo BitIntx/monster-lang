@@ -413,8 +413,12 @@ impl Parser {
             false
         };
         let name = self.expect_ident()?.lexeme;
-        self.expect(TokenKind::Colon)?;
-        let ty = self.parse_type()?;
+        let ty = if self.at(TokenKind::Colon) {
+            self.expect(TokenKind::Colon)?;
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
         self.expect(TokenKind::Equal)?;
         let value = self.parse_expr()?;
         self.expect(TokenKind::Semicolon)?;
@@ -1168,7 +1172,7 @@ mod tests {
             body[0],
             Stmt::Let {
                 mutable: true,
-                ty: Type::I32,
+                ty: Some(Type::I32),
                 ..
             }
         ));
@@ -1176,7 +1180,7 @@ mod tests {
             body[1],
             Stmt::Let {
                 mutable: false,
-                ty: Type::Bool,
+                ty: Some(Type::Bool),
                 ..
             }
         ));
@@ -1186,6 +1190,43 @@ mod tests {
         };
         assert!(matches!(condition, Expr::Binary { op: BinOp::Lt, .. }));
         assert!(matches!(body[0], Stmt::If { .. }));
+    }
+
+    #[test]
+    fn parses_let_type_inference() {
+        let program = parse_source(
+            r#"
+            fn main() -> i32 {
+                let x = 10;
+                let mut y = x + 20;
+                return y;
+            }
+            "#,
+        );
+
+        let body = program.functions[0]
+            .body
+            .as_ref()
+            .expect("expected function body");
+
+        assert!(matches!(
+            body[0],
+            Stmt::Let {
+                ref name,
+                ty: None,
+                mutable: false,
+                value: Expr::Int(10),
+            } if name == "x"
+        ));
+        assert!(matches!(
+            body[1],
+            Stmt::Let {
+                ref name,
+                ty: None,
+                mutable: true,
+                value: Expr::Binary { op: BinOp::Add, .. },
+            } if name == "y"
+        ));
     }
 
     #[test]
@@ -1382,7 +1423,7 @@ mod tests {
         assert!(matches!(
             body[0],
             Stmt::Let {
-                ty: Type::USize,
+                ty: Some(Type::USize),
                 value: Expr::SizeOf(Type::Named(ref name)),
                 ..
             } if name == "Pair"
@@ -1452,7 +1493,7 @@ mod tests {
         assert!(matches!(
             body[0],
             Stmt::Let {
-                ty: Type::Named(ref struct_name),
+                ty: Some(Type::Named(ref struct_name)),
                 value: Expr::StructLiteral {
                     name: ref literal_name,
                     ..
@@ -1534,7 +1575,7 @@ mod tests {
         assert!(matches!(
             body[0],
             Stmt::Let {
-                ty: Type::Array(_, 3),
+                ty: Some(Type::Array(_, 3)),
                 value: Expr::ArrayLiteral(_),
                 ..
             }
@@ -1568,7 +1609,7 @@ mod tests {
         assert!(matches!(
             body[0],
             Stmt::Let {
-                ty: Type::U8,
+                ty: Some(Type::U8),
                 value: Expr::Cast { ty: Type::U8, .. },
                 ..
             }
@@ -1577,7 +1618,7 @@ mod tests {
         assert!(matches!(
             body[1],
             Stmt::Let {
-                ty: Type::USize,
+                ty: Some(Type::USize),
                 value: Expr::Cast {
                     ty: Type::USize,
                     ..
@@ -1685,7 +1726,7 @@ mod tests {
         assert!(matches!(
             body[1],
             Stmt::Let {
-                ty: Type::Ptr(_),
+                ty: Some(Type::Ptr(_)),
                 value: Expr::Unary {
                     op: UnaryOp::AddrOf,
                     ..
@@ -1733,7 +1774,7 @@ mod tests {
             body[0],
             Stmt::Let {
                 mutable: true,
-                ty: Type::Array(_, 3),
+                ty: Some(Type::Array(_, 3)),
                 ..
             }
         ));

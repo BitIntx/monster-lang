@@ -286,10 +286,16 @@ impl Analyzer {
                 mutable,
                 value,
             } => {
-                self.ensure_value_type(ty, "local variable")?;
                 let value_ty = self.analyze_expr(value)?;
-                self.expect_type(&value_ty, ty, &format!("initializer for '{name}'"))?;
-                self.declare_var(name, ty.clone(), *mutable)?;
+                let local_ty = if let Some(ty) = ty {
+                    self.ensure_value_type(ty, "local variable")?;
+                    self.expect_type(&value_ty, ty, &format!("initializer for '{name}'"))?;
+                    ty.clone()
+                } else {
+                    self.ensure_value_type(&value_ty, "inferred local variable")?;
+                    value_ty
+                };
+                self.declare_var(name, local_ty, *mutable)?;
                 Ok(())
             }
             Stmt::Assign { name, value } => {
@@ -1405,6 +1411,59 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accepts_inferred_local_types() {
+        let result = analyze_source(
+            r#"
+            struct Pair {
+                left: i32,
+                right: i32,
+            }
+
+            enum Token {
+                Int(i32),
+                Eof,
+            }
+
+            fn main() -> i32 {
+                let x = 10;
+                let pair = Pair { left: x, right: 20 };
+                let token = Int(pair.left);
+                let mut total = match token {
+                    Int(value) => value,
+                    Eof => 0,
+                };
+
+                total = total + pair.right;
+                return total;
+            }
+            "#,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_inferred_void_local_type() {
+        let result = analyze_source(
+            r#"
+            fn log() -> void {
+                return;
+            }
+
+            fn main() -> i32 {
+                let value = log();
+                return 0;
+            }
+            "#,
+        );
+
+        assert!(matches!(
+            result,
+            Err(message) if message.contains("inferred local variable cannot have type void")
+        ));
     }
 
     #[test]

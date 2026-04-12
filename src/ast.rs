@@ -95,7 +95,7 @@ pub struct MatchArm {
 pub enum Stmt {
     Let {
         name: String,
-        ty: Type,
+        ty: Option<Type>,
         mutable: bool,
         value: Expr,
     },

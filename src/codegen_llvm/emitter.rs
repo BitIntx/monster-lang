@@ -175,8 +175,9 @@ impl<'a> FunctionEmitter<'a> {
                 value,
             } => {
                 let value = self.emit_expr(value)?;
-                let ptr = self.create_stack_slot(name, ty);
-                self.declare_local(name, ty.clone(), ptr.clone())?;
+                let local_ty = ty.as_ref().unwrap_or(&value.ty);
+                let ptr = self.create_stack_slot(name, local_ty);
+                self.declare_local(name, local_ty.clone(), ptr.clone())?;
                 self.emit_store(&value, &ptr);
                 Ok(())
             }
