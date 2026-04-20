@@ -1,0 +1,63 @@
+// Tiny assertion helpers for examples and early Monster-written tests.
+//
+// These functions intentionally fail fast with exit code 1. Keeping this as a
+// Monster std module lets examples become executable checks without adding a
+// separate test framework yet.
+
+import "std/str.mnst";
+
+extern fn exit(code: i32) -> void;
+
+fn assert_true(value: bool) -> void {
+    if !value {
+        print_ln_str("assert_true failed");
+        exit(1);
+    }
+
+    return;
+}
+
+fn assert_false(value: bool) -> void {
+    if value {
+        print_ln_str("assert_false failed");
+        exit(1);
+    }
+
+    return;
+}
+
+fn assert_i32_eq(expected: i32, actual: i32) -> void {
+    if expected != actual {
+        print_str("assert_i32_eq failed: expected ");
+        print_i32(expected);
+        print_str(", got ");
+        print_ln_i32(actual);
+        exit(1);
+    }
+
+    return;
+}
+
+fn assert_usize_eq(expected: usize, actual: usize) -> void {
+    if expected != actual {
+        print_str("assert_usize_eq failed: expected ");
+        print_i32(expected as i32);
+        print_str(", got ");
+        print_ln_i32(actual as i32);
+        exit(1);
+    }
+
+    return;
+}
+
+fn assert_str_eq(expected: str, actual: str) -> void {
+    if !str_equals(expected, actual) {
+        print_str("assert_str_eq failed: expected ");
+        print_str(expected);
+        print_str(", got ");
+        print_ln_str(actual);
+        exit(1);
+    }
+
+    return;
+}

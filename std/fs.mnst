@@ -1,0 +1,32 @@
+// Small file helpers built on Monster's current file I/O builtins.
+//
+// `read_file` returns an owned byte buffer and writes its length through an
+// out-parameter. `FileBytes` keeps those two values together so callers can
+// pair reads with `defer fs_free(file)`.
+
+import "std/mem.mnst";
+
+struct FileBytes {
+    data: *u8,
+    len: usize,
+}
+
+fn fs_read(path: str) -> FileBytes {
+    let mut len: usize = 0 as usize;
+    let data = read_file(path, &len);
+    return FileBytes { data: data, len: len };
+}
+
+fn fs_write(path: str, file: FileBytes) -> void {
+    write_file(path, file.data, file.len);
+    return;
+}
+
+fn fs_free(file: FileBytes) -> void {
+    mem_free_u8(file.data);
+    return;
+}
+
+fn fs_as_str(file: FileBytes) -> str {
+    return file.data as str;
+}

@@ -47,9 +47,13 @@ jobs:
           cargo run --locked -- check examples/imports/main.mnst
           cargo run --locked -- emit-llvm examples/imports/main.mnst > /tmp/imports.ll
           cargo run --locked -- run examples/imports/main.mnst
+          cargo run --locked -- check std/assert.mnst
+          cargo run --locked -- check std/fs.mnst
           cargo run --locked -- check std/mem.mnst
           cargo run --locked -- check std/str.mnst
           cargo run --locked -- check std/vec_i32.mnst
+          cargo run --locked -- check examples/std_fs_assert.mnst
+          cargo run --locked -- run examples/std_fs_assert.mnst
           cargo run --locked -- check examples/string_bytes.mnst
           cargo run --locked -- run examples/string_bytes.mnst
           cargo run --locked -- check examples/growable_vec_i32.mnst

@@ -10,6 +10,10 @@ designing a large API up front.
 
 Current modules:
 
+- `assert.mnst`: fail-fast assertion helpers for examples and early
+  Monster-written tests.
+- `fs.mnst`: a small `FileBytes` wrapper around `read_file`, `write_file`,
+  and `std/mem.mnst` cleanup.
 - `mem.mnst`: byte-oriented allocation and memory helpers around `calloc`,
   `free`, `memcpy`, and `memcmp`.
 - `str.mnst`: small C-style string helpers around `strlen`, `str_eq`, and

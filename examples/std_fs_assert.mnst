@@ -1,0 +1,16 @@
+// File I/O wrapped in std/fs.mnst plus executable checks from std/assert.mnst.
+
+import "std/assert.mnst";
+import "std/fs.mnst";
+
+fn main() -> i32 {
+    let file = fs_read("exam.mnst");
+    defer fs_free(file);
+
+    assert_true(file.len > (0 as usize));
+    assert_str_eq("Monster", "Monster");
+    assert_i32_eq(3, 1 + 2);
+
+    fs_write("target/mst/std_fs_assert.copy", file);
+    return 0;
+}
