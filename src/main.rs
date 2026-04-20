@@ -1544,8 +1544,8 @@ fn compile_to_native(
     output_path: &Path,
     options: &BuildOptions,
 ) -> Result<(), String> {
-    let clang = find_tool(&["clang-18", "clang"])
-        .ok_or_else(|| "failed to find clang-18 or clang on PATH".to_string())?;
+    let clang = find_tool(&["clang-22", "clang"])
+        .ok_or_else(|| "failed to find clang-22 or clang on PATH".to_string())?;
 
     let mut command = Command::new(&clang);
     command.arg(llvm_input);
@@ -1596,8 +1596,8 @@ fn clean_artifacts(path: &Path) -> Result<(), String> {
 }
 
 fn optimize_llvm_ir(input: &Path, output: &Path, opt_level: OptLevel) -> Result<(), String> {
-    let opt = find_tool(&["opt-18", "opt"])
-        .ok_or_else(|| "failed to find opt-18 or opt on PATH".to_string())?;
+    let opt = find_tool(&["opt-22", "opt"])
+        .ok_or_else(|| "failed to find opt-22 or opt on PATH".to_string())?;
     let passes = format!("default<O{}>", opt_level.as_u8());
 
     let command_output = Command::new(&opt)
@@ -1623,8 +1623,8 @@ fn optimize_llvm_ir(input: &Path, output: &Path, opt_level: OptLevel) -> Result<
 }
 
 fn verify_llvm_ir(path: &Path) -> Result<(), String> {
-    let opt = find_tool(&["opt-18", "opt"])
-        .ok_or_else(|| "failed to find opt-18 or opt on PATH".to_string())?;
+    let opt = find_tool(&["opt-22", "opt"])
+        .ok_or_else(|| "failed to find opt-22 or opt on PATH".to_string())?;
 
     let output = Command::new(&opt)
         .arg("-passes=verify")

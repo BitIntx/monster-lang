@@ -7,7 +7,7 @@ Monster is an experimental low-level, ahead-of-time systems programming language
 
 The current compiler is written in Rust and targets LLVM IR.
 
-`.mnst source -> lexer -> parser -> AST -> semantic analysis -> LLVM IR -> opt-18 (default -O2) -> clang-18 -> native binary`
+`.mnst source -> lexer -> parser -> AST -> semantic analysis -> LLVM IR -> opt-22 (default -O2) -> clang-22 -> native binary`
 
 The compiler executable is named `mst`, and Monster source files use the `.mnst` extension.
 
@@ -59,13 +59,13 @@ mst -upgrade
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.sh | env MST_VERSION=v0.1.4 bash
+curl -fsSL https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.sh | env MST_VERSION=v0.1.5 bash
 ```
 
 Pin a specific release on Windows PowerShell:
 
 ```powershell
-$env:MST_VERSION = "v0.1.4"
+$env:MST_VERSION = "v0.1.5"
 irm https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.ps1 | iex
 ```
 
@@ -73,7 +73,7 @@ The release installer currently supports Linux x86_64, Linux ARM64, macOS x86_64
 The recommended Linux/macOS install path is `/usr/local/bin` via `PREFIX=/usr/local`; without `sudo`, the installer uses `~/.local/bin`.
 On Windows it installs `mst.exe` into `%LOCALAPPDATA%\Programs\mst\bin` and adds that directory to the user `PATH`.
 Release and source installers also install the bundled standard library to the matching `share/mst/std` directory.
-For `mst build` and `mst run`, you still need `clang-18` or `clang`, and `opt-18` or `opt` on your `PATH`.
+For `mst build` and `mst run`, you still need `clang-22` or `clang`, and `opt-22` or `opt` on your `PATH`.
 
 Install from source instead:
 
@@ -364,8 +364,8 @@ fn main() -> i32 {
 Requirements:
 
 - Rust
-- `clang-18`
-- `opt-18`
+- `clang-22`
+- `opt-22`
 
 Build the compiler:
 
@@ -409,7 +409,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 
 - `cargo build`
 - `cargo test`
-- LLVM IR verification and `-O2` optimization through `opt-18`
+- LLVM IR verification and `-O2` optimization through `opt-22`
 - end-to-end LLVM build and run tests against `exam.mnst`
 - standard-library smoke checks for `std/assert.mnst`, `std/fs.mnst`, `std/mem.mnst`, `std/str.mnst`, and `std/vec_i32.mnst`
 - an end-to-end growable `VecI32` example using the early `std/vec_i32.mnst` module

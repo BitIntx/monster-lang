@@ -15,17 +15,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install LLVM 18 toolchain
+      - name: Install LLVM 22 toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-18 llvm-18 llvm-18-tools
+          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 22
 
       - name: Show toolchain
         run: |
           rustc --version
           cargo --version
-          clang-18 --version
-          opt-18 --version
+          clang-22 --version
+          opt-22 --version
 
       - name: Build
         run: cargo build --locked --verbose

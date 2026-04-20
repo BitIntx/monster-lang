@@ -5,7 +5,9 @@ REPO="BitIntx/monster-lang"
 PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="${BIN_DIR:-$PREFIX/bin}"
 STD_DIR="${STD_DIR:-$(dirname "$BIN_DIR")/share/mst/std}"
-APT_LLVM_INSTALL_CMD="apt-get install -y clang-18 llvm-18 llvm-18-tools"
+LLVM_MAJOR_VERSION="22"
+APT_LLVM_INSTALL_CMD="apt-get install -y clang-${LLVM_MAJOR_VERSION} llvm-${LLVM_MAJOR_VERSION} llvm-${LLVM_MAJOR_VERSION}-tools"
+LLVM_APT_INSTALL_CMD="curl -fsSL https://apt.llvm.org/llvm.sh | sudo bash -s -- ${LLVM_MAJOR_VERSION}"
 
 need_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -72,11 +74,11 @@ detect_asset_name() {
 }
 
 have_backend_tools() {
-    if ! command -v clang-18 >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+    if ! command -v "clang-${LLVM_MAJOR_VERSION}" >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
         return 1
     fi
 
-    if ! command -v opt-18 >/dev/null 2>&1 && ! command -v opt >/dev/null 2>&1; then
+    if ! command -v "opt-${LLVM_MAJOR_VERSION}" >/dev/null 2>&1 && ! command -v opt >/dev/null 2>&1; then
         return 1
     fi
 
@@ -104,6 +106,8 @@ print_backend_tool_help() {
     if is_debian_like; then
         echo "[mst] install LLVM tools with:" >&2
         echo "sudo apt-get update && sudo $APT_LLVM_INSTALL_CMD" >&2
+        echo "[mst] if your apt repositories do not provide LLVM ${LLVM_MAJOR_VERSION}, use apt.llvm.org:" >&2
+        echo "$LLVM_APT_INSTALL_CMD" >&2
     elif [[ "$(uname -s)" == "Darwin" ]]; then
         echo "[mst] install LLVM tools and make sure clang and opt are on PATH" >&2
         if command -v brew >/dev/null 2>&1; then
@@ -113,8 +117,8 @@ print_backend_tool_help() {
         fi
     else
         echo "[mst] install LLVM tools and make sure one of each is available on PATH:" >&2
-        echo "[mst]   clang-18 or clang" >&2
-        echo "[mst]   opt-18 or opt" >&2
+        echo "[mst]   clang-${LLVM_MAJOR_VERSION} or clang" >&2
+        echo "[mst]   opt-${LLVM_MAJOR_VERSION} or opt" >&2
     fi
 }
 
@@ -133,7 +137,17 @@ install_backend_tools_with_apt() {
 
     echo "[mst] installing LLVM toolchain..."
     "${elevate[@]}" apt-get update
-    "${elevate[@]}" apt-get install -y clang-18 llvm-18 llvm-18-tools
+    if ! "${elevate[@]}" apt-get install -y \
+        "clang-${LLVM_MAJOR_VERSION}" \
+        "llvm-${LLVM_MAJOR_VERSION}" \
+        "llvm-${LLVM_MAJOR_VERSION}-tools"; then
+        echo "[mst] apt did not provide LLVM ${LLVM_MAJOR_VERSION}; trying apt.llvm.org installer..." >&2
+        if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+            curl -fsSL https://apt.llvm.org/llvm.sh | bash -s -- "${LLVM_MAJOR_VERSION}"
+        else
+            curl -fsSL https://apt.llvm.org/llvm.sh | sudo bash -s -- "${LLVM_MAJOR_VERSION}"
+        fi
+    fi
 }
 
 maybe_install_backend_tools() {
@@ -143,7 +157,7 @@ maybe_install_backend_tools() {
         return 0
     fi
 
-    echo "[mst] warning: clang-18/clang and opt-18/opt are required for 'mst build' and 'mst run'" >&2
+    echo "[mst] warning: clang-${LLVM_MAJOR_VERSION}/clang and opt-${LLVM_MAJOR_VERSION}/opt are required for 'mst build' and 'mst run'" >&2
 
     if ! is_debian_like; then
         echo "[mst] automatic installation is only available on Ubuntu/Debian" >&2

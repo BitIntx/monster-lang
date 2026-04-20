@@ -7,6 +7,7 @@ PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="${BIN_DIR:-$PREFIX/bin}"
 STD_DIR="${STD_DIR:-$(dirname "$BIN_DIR")/share/mst/std}"
 TARGET_PATH="$BIN_DIR/mst"
+LLVM_MAJOR_VERSION="22"
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "error: cargo is required to build mst from source" >&2
@@ -26,12 +27,12 @@ cp -R "$PROJECT_ROOT/std" "$STD_DIR"
 echo "[mst] installed to $TARGET_PATH"
 echo "[mst] installed std to $STD_DIR"
 
-if ! command -v clang-18 >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
-    echo "[mst] warning: clang-18 or clang was not found on PATH" >&2
+if ! command -v "clang-${LLVM_MAJOR_VERSION}" >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+    echo "[mst] warning: clang-${LLVM_MAJOR_VERSION} or clang was not found on PATH" >&2
 fi
 
-if ! command -v opt-18 >/dev/null 2>&1 && ! command -v opt >/dev/null 2>&1; then
-    echo "[mst] warning: opt-18 or opt was not found on PATH" >&2
+if ! command -v "opt-${LLVM_MAJOR_VERSION}" >/dev/null 2>&1 && ! command -v opt >/dev/null 2>&1; then
+    echo "[mst] warning: opt-${LLVM_MAJOR_VERSION} or opt was not found on PATH" >&2
 fi
 
 case ":$PATH:" in

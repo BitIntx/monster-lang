@@ -36,8 +36,8 @@ function Test-BackendTools {
 }
 
 function Show-BackendToolHelp {
-    Write-Warning "clang.exe and opt.exe are required for 'mst build' and 'mst run'."
-    Write-Host "[mst] Install LLVM and ensure LLVM\bin is on PATH."
+    Write-Warning "LLVM 22 clang.exe and opt.exe are required for 'mst build' and 'mst run'."
+    Write-Host "[mst] Install LLVM 22 and ensure LLVM\bin is on PATH."
 }
 
 if (-not $Version) {
