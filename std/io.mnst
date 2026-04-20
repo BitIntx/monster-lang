@@ -1,0 +1,67 @@
+// Thin I/O wrappers around Monster's current runtime builtins.
+//
+// Keeping calls behind std/io.mnst gives examples a stable import surface while
+// the runtime implementation continues to evolve.
+
+fn io_print_i32(value: i32) -> void {
+    print_i32(value);
+    return;
+}
+
+fn io_print_bool(value: bool) -> void {
+    print_bool(value);
+    return;
+}
+
+fn io_print_str(value: str) -> void {
+    print_str(value);
+    return;
+}
+
+fn io_print_u8(value: u8) -> void {
+    print_i32(value as i32);
+    return;
+}
+
+fn io_print_usize(value: usize) -> void {
+    print_i32(value as i32);
+    return;
+}
+
+fn io_print_ln_i32(value: i32) -> void {
+    print_ln_i32(value);
+    return;
+}
+
+fn io_print_ln_bool(value: bool) -> void {
+    print_ln_bool(value);
+    return;
+}
+
+fn io_print_ln_str(value: str) -> void {
+    print_ln_str(value);
+    return;
+}
+
+fn io_print_ln_u8(value: u8) -> void {
+    print_ln_i32(value as i32);
+    return;
+}
+
+fn io_print_ln_usize(value: usize) -> void {
+    print_ln_i32(value as i32);
+    return;
+}
+
+fn io_read_i32() -> i32 {
+    return read_i32();
+}
+
+fn io_read_file(path: str, out_len: *usize) -> *u8 {
+    return read_file(path, out_len);
+}
+
+fn io_write_file(path: str, data: *u8, len: usize) -> void {
+    write_file(path, data, len);
+    return;
+}

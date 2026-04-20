@@ -1,0 +1,98 @@
+// ASCII byte classification and case conversion helpers.
+//
+// Monster is still byte-oriented, so these helpers intentionally operate on
+// u8 values rather than promising full Unicode behavior.
+
+const ASCII_TAB: u8 = 9 as u8;
+const ASCII_NEWLINE: u8 = 10 as u8;
+const ASCII_VERTICAL_TAB: u8 = 11 as u8;
+const ASCII_FORM_FEED: u8 = 12 as u8;
+const ASCII_CARRIAGE_RETURN: u8 = 13 as u8;
+const ASCII_SPACE: u8 = 32 as u8;
+const ASCII_ZERO: u8 = 48 as u8;
+const ASCII_NINE: u8 = 57 as u8;
+const ASCII_A_UPPER: u8 = 65 as u8;
+const ASCII_F_UPPER: u8 = 70 as u8;
+const ASCII_Z_UPPER: u8 = 90 as u8;
+const ASCII_UNDERSCORE: u8 = 95 as u8;
+const ASCII_A_LOWER: u8 = 97 as u8;
+const ASCII_F_LOWER: u8 = 102 as u8;
+const ASCII_Z_LOWER: u8 = 122 as u8;
+const ASCII_DELETE: u8 = 127 as u8;
+const ASCII_CASE_DELTA: u8 = 32 as u8;
+
+fn ascii_is_upper(c: u8) -> bool {
+    return c >= ASCII_A_UPPER && c <= ASCII_Z_UPPER;
+}
+
+fn ascii_is_lower(c: u8) -> bool {
+    return c >= ASCII_A_LOWER && c <= ASCII_Z_LOWER;
+}
+
+fn ascii_is_alpha(c: u8) -> bool {
+    return ascii_is_upper(c) || ascii_is_lower(c);
+}
+
+fn ascii_is_digit(c: u8) -> bool {
+    return c >= ASCII_ZERO && c <= ASCII_NINE;
+}
+
+fn ascii_is_alnum(c: u8) -> bool {
+    return ascii_is_alpha(c) || ascii_is_digit(c);
+}
+
+fn ascii_is_space(c: u8) -> bool {
+    return c == ASCII_SPACE || c == ASCII_TAB || c == ASCII_NEWLINE || c == ASCII_CARRIAGE_RETURN || c == ASCII_VERTICAL_TAB || c == ASCII_FORM_FEED;
+}
+
+fn ascii_is_hex_digit(c: u8) -> bool {
+    return ascii_is_digit(c) || (c >= ASCII_A_UPPER && c <= ASCII_F_UPPER) || (c >= ASCII_A_LOWER && c <= ASCII_F_LOWER);
+}
+
+fn ascii_is_printable(c: u8) -> bool {
+    return c >= ASCII_SPACE && c < ASCII_DELETE;
+}
+
+fn ascii_is_ident_start(c: u8) -> bool {
+    return ascii_is_alpha(c) || c == ASCII_UNDERSCORE;
+}
+
+fn ascii_is_ident_continue(c: u8) -> bool {
+    return ascii_is_ident_start(c) || ascii_is_digit(c);
+}
+
+fn ascii_to_lower(c: u8) -> u8 {
+    if ascii_is_upper(c) {
+        return c + ASCII_CASE_DELTA;
+    }
+
+    return c;
+}
+
+fn ascii_to_upper(c: u8) -> u8 {
+    if ascii_is_lower(c) {
+        return c - ASCII_CASE_DELTA;
+    }
+
+    return c;
+}
+
+fn ascii_digit_to_i32(c: u8) -> i32 {
+    if !ascii_is_digit(c) {
+        return -1;
+    }
+
+    return (c as i32) - (ASCII_ZERO as i32);
+}
+
+fn ascii_hex_digit_to_i32(c: u8) -> i32 {
+    if ascii_is_digit(c) {
+        return ascii_digit_to_i32(c);
+    } else if c >= ASCII_A_UPPER && c <= ASCII_F_UPPER {
+        return (c as i32) - (ASCII_A_UPPER as i32) + 10;
+    } else if c >= ASCII_A_LOWER && c <= ASCII_F_LOWER {
+        return (c as i32) - (ASCII_A_LOWER as i32) + 10;
+    }
+
+    return -1;
+}

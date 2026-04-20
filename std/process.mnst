@@ -1,0 +1,31 @@
+// Tiny process helpers for CLI-style Monster programs.
+
+extern fn exit(code: i32) -> void;
+
+const PROCESS_SUCCESS: i32 = 0;
+const PROCESS_FAILURE: i32 = 1;
+
+fn process_exit(code: i32) -> void {
+    exit(code);
+    return;
+}
+
+fn process_success() -> i32 {
+    return PROCESS_SUCCESS;
+}
+
+fn process_failure() -> i32 {
+    return PROCESS_FAILURE;
+}
+
+fn process_has_arg(argc: i32, index: i32) -> bool {
+    return index >= 0 && index < argc;
+}
+
+fn process_arg_or(argc: i32, argv: **u8, index: i32, fallback: str) -> str {
+    if process_has_arg(argc, index) {
+        return argv[index] as str;
+    }
+
+    return fallback;
+}

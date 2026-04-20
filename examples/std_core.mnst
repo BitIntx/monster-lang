@@ -1,0 +1,33 @@
+// A small executable tour of the first convenience std modules.
+
+import "std/ascii.mnst";
+import "std/debug.mnst";
+import "std/io.mnst";
+import "std/num.mnst";
+import "std/path.mnst";
+import "std/process.mnst";
+import "std/result.mnst";
+
+fn main(argc: i32, argv: **u8) -> i32 {
+    let name: str = process_arg_or(argc, argv, 0, "mst");
+    let digits: *u8 = "12345" as *u8;
+    let letter: u8 = ("Q" as *u8)[0];
+    let lower: u8 = ascii_to_lower(letter);
+
+    debug_assert_true(ascii_is_upper(letter));
+    debug_assert_true(ascii_is_lower(lower));
+    debug_assert_i32_eq(15, ascii_hex_digit_to_i32(("f" as *u8)[0]));
+    debug_assert_i32_eq(12345, num_parse_i32_digits(digits, 5 as usize));
+    debug_assert_i32_eq(10, num_clamp_i32(15, 0, 10));
+    debug_assert_true(path_is_mnst("examples/std_core.mnst"));
+    debug_assert_str_eq("std_core.mnst", path_basename("examples/std_core.mnst"));
+    debug_assert_true(result_is_ok(RESULT_OK));
+    debug_assert_i32_eq(99, result_or_i32(RESULT_ERR_INVALID, 1, 99));
+
+    io_print_str("program: ");
+    io_print_ln_str(path_basename(name));
+    io_print_str("result: ");
+    io_print_ln_str(result_name(RESULT_OK));
+
+    return process_success();
+}

@@ -330,7 +330,7 @@ fn main() -> i32 {
 }
 ```
 
-The first small standard-library modules live under [`std/`](./std): [`std/assert.mnst`](./std/assert.mnst) for fail-fast checks, [`std/fs.mnst`](./std/fs.mnst) for `FileBytes` helpers, [`std/mem.mnst`](./std/mem.mnst) for byte-oriented allocation and memory helpers, [`std/str.mnst`](./std/str.mnst) for C-style string helpers, and [`std/vec_i32.mnst`](./std/vec_i32.mnst) for a concrete growable vector. Imports under `std/` are resolved through `MST_STD_PATH`, the installed `share/mst/std` directory, and the compiler checkout's `std/` directory. See [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example that imports it, grows with `malloc` / `realloc` / `free`, and uses `defer` for cleanup. [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) shows the raw LLVM IR emitted by the current compiler.
+The first small standard-library modules live under [`std/`](./std). They cover fail-fast checks, ASCII and number helpers, debug helpers, file and process wrappers, byte memory, paths, result codes, C-style strings, and a concrete growable vector. Imports under `std/` are resolved through `MST_STD_PATH`, the installed `share/mst/std` directory, and the compiler checkout's `std/` directory. See [`examples/std_core.mnst`](./examples/std_core.mnst) for a compact tour of the convenience modules and [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example. [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) shows the raw LLVM IR emitted by the current compiler.
 
 Monster also supports file-based imports plus loop control. If you save this snippet at the repository root, it can import the checked-in helper at [`examples/imports/math.mnst`](./examples/imports/math.mnst):
 
@@ -411,7 +411,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 - `cargo test`
 - LLVM IR verification and `-O2` optimization through `opt-22`
 - end-to-end LLVM build and run tests against `exam.mnst`
-- standard-library smoke checks for `std/assert.mnst`, `std/fs.mnst`, `std/mem.mnst`, `std/str.mnst`, and `std/vec_i32.mnst`
+- standard-library smoke checks for the importable modules under `std/`
 - an end-to-end growable `VecI32` example using the early `std/vec_i32.mnst` module
 
 ## Example Program
@@ -428,6 +428,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 - [`examples/imports/math.mnst`](./examples/imports/math.mnst): imported helper module used by the loop-control example
 - [`examples/match.mnst`](./examples/match.mnst): payload enum matching with `Variant => expr` and `Variant(binding) => expr`
 - [`examples/string_bytes.mnst`](./examples/string_bytes.mnst): `std/str.mnst` and `std/mem.mnst` helpers against a copied C string buffer
+- [`examples/std_core.mnst`](./examples/std_core.mnst): a compact tour of `std/ascii.mnst`, `std/num.mnst`, `std/io.mnst`, `std/path.mnst`, `std/process.mnst`, `std/result.mnst`, and `std/debug.mnst`
 - [`examples/std_fs_assert.mnst`](./examples/std_fs_assert.mnst): `std/fs.mnst` file helpers plus `std/assert.mnst` executable checks
 
 ## Roadmap

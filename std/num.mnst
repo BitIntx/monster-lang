@@ -1,0 +1,93 @@
+// Small numeric helpers for scalar code and byte-oriented parsers.
+
+import "std/ascii.mnst";
+
+fn num_abs_i32(value: i32) -> i32 {
+    if value < 0 {
+        return -value;
+    }
+
+    return value;
+}
+
+fn num_min_i32(a: i32, b: i32) -> i32 {
+    if a < b {
+        return a;
+    }
+
+    return b;
+}
+
+fn num_max_i32(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+
+    return b;
+}
+
+fn num_clamp_i32(value: i32, low: i32, high: i32) -> i32 {
+    if value < low {
+        return low;
+    } else if value > high {
+        return high;
+    }
+
+    return value;
+}
+
+fn num_min_usize(a: usize, b: usize) -> usize {
+    if a < b {
+        return a;
+    }
+
+    return b;
+}
+
+fn num_max_usize(a: usize, b: usize) -> usize {
+    if a > b {
+        return a;
+    }
+
+    return b;
+}
+
+fn num_is_digit_u8(c: u8) -> bool {
+    return ascii_is_digit(c);
+}
+
+fn num_digit_to_i32(c: u8) -> i32 {
+    return ascii_digit_to_i32(c);
+}
+
+fn num_parse_i32_digits(data: *u8, len: usize) -> i32 {
+    let mut i: usize = 0 as usize;
+    let mut value: i32 = 0;
+
+    while i < len && ascii_is_digit(data[i]) {
+        value = value * 10 + ascii_digit_to_i32(data[i]);
+        i = i + (1 as usize);
+    }
+
+    return value;
+}
+
+fn num_parse_i32_or(data: *u8, len: usize, fallback: i32) -> i32 {
+    if len == (0 as usize) {
+        return fallback;
+    }
+
+    let mut i: usize = 0 as usize;
+    let mut value: i32 = 0;
+
+    while i < len {
+        if !ascii_is_digit(data[i]) {
+            return fallback;
+        }
+
+        value = value * 10 + ascii_digit_to_i32(data[i]);
+        i = i + (1 as usize);
+    }
+
+    return value;
+}

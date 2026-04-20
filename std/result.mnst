@@ -1,0 +1,58 @@
+// Minimal result-code helpers until Monster grows generic Result<T, E>.
+
+const RESULT_OK: i32 = 0;
+const RESULT_ERR: i32 = 1;
+const RESULT_ERR_INVALID: i32 = 2;
+const RESULT_ERR_NOT_FOUND: i32 = 3;
+const RESULT_ERR_EOF: i32 = 4;
+const RESULT_ERR_OUT_OF_MEMORY: i32 = 5;
+
+fn result_is_ok(code: i32) -> bool {
+    return code == RESULT_OK;
+}
+
+fn result_is_err(code: i32) -> bool {
+    return !result_is_ok(code);
+}
+
+fn result_name(code: i32) -> str {
+    if code == RESULT_OK {
+        return "ok";
+    } else if code == RESULT_ERR {
+        return "error";
+    } else if code == RESULT_ERR_INVALID {
+        return "invalid";
+    } else if code == RESULT_ERR_NOT_FOUND {
+        return "not_found";
+    } else if code == RESULT_ERR_EOF {
+        return "eof";
+    } else if code == RESULT_ERR_OUT_OF_MEMORY {
+        return "out_of_memory";
+    }
+
+    return "unknown";
+}
+
+fn result_or_i32(code: i32, value: i32, fallback: i32) -> i32 {
+    if result_is_ok(code) {
+        return value;
+    }
+
+    return fallback;
+}
+
+fn result_or_usize(code: i32, value: usize, fallback: usize) -> usize {
+    if result_is_ok(code) {
+        return value;
+    }
+
+    return fallback;
+}
+
+fn result_or_bool(code: i32, value: bool, fallback: bool) -> bool {
+    if result_is_ok(code) {
+        return value;
+    }
+
+    return fallback;
+}

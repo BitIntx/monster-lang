@@ -1,16 +1,5 @@
 import "token.mnst";
-
-const ASCII_A_UPPER: u8 = 65 as u8;
-const ASCII_Z_UPPER: u8 = 90 as u8;
-const ASCII_A_LOWER: u8 = 97 as u8;
-const ASCII_Z_LOWER: u8 = 122 as u8;
-const ASCII_UNDERSCORE: u8 = 95 as u8;
-const ASCII_ZERO: u8 = 48 as u8;
-const ASCII_NINE: u8 = 57 as u8;
-const ASCII_SPACE: u8 = 32 as u8;
-const ASCII_NEWLINE: u8 = 10 as u8;
-const ASCII_CARRIAGE_RETURN: u8 = 13 as u8;
-const ASCII_TAB: u8 = 9 as u8;
+import "std/ascii.mnst";
 
 struct TokenBuffer {
     data: *Token,
@@ -38,22 +27,6 @@ fn push_token(tokens: TokenBuffer, token: Token) -> TokenBuffer {
     }
 
     return out;
-}
-
-fn is_alpha(c: u8) -> bool {
-    return (c >= ASCII_A_UPPER && c <= ASCII_Z_UPPER) || (c >= ASCII_A_LOWER && c <= ASCII_Z_LOWER) || c == ASCII_UNDERSCORE;
-}
-
-fn is_digit(c: u8) -> bool {
-    return c >= ASCII_ZERO && c <= ASCII_NINE;
-}
-
-fn is_alnum(c: u8) -> bool {
-    return is_alpha(c) || is_digit(c);
-}
-
-fn is_space(c: u8) -> bool {
-    return c == ASCII_SPACE || c == ASCII_NEWLINE || c == ASCII_CARRIAGE_RETURN || c == ASCII_TAB;
 }
 
 fn keyword_eq(data: *u8, start: usize, len: usize, text: str) -> bool {
@@ -113,7 +86,7 @@ fn classify_identifier(data: *u8, start: usize, len: usize) -> TokenKind {
 fn scan_identifier(data: *u8, start: usize, len: usize) -> usize {
     let mut i: usize = start;
 
-    while i < len && is_alnum(data[i]) {
+    while i < len && ascii_is_ident_continue(data[i]) {
         i = i + (1 as usize);
     }
 
@@ -123,7 +96,7 @@ fn scan_identifier(data: *u8, start: usize, len: usize) -> usize {
 fn scan_number(data: *u8, start: usize, len: usize) -> usize {
     let mut i: usize = start;
 
-    while i < len && is_digit(data[i]) {
+    while i < len && ascii_is_digit(data[i]) {
         i = i + (1 as usize);
     }
 
@@ -262,7 +235,7 @@ fn lex(data: *u8, len: usize) -> TokenBuffer {
     while i < len {
         let c: u8 = data[i];
 
-        if is_space(c) {
+        if ascii_is_space(c) {
             if c == (10 as u8) {
                 line = line + 1;
                 column = 1;
@@ -275,7 +248,7 @@ fn lex(data: *u8, len: usize) -> TokenBuffer {
             let next: usize = skip_line_comment(data, i, len);
             column = column + ((next - i) as i32);
             i = next;
-        } else if is_alpha(c) {
+        } else if ascii_is_ident_start(c) {
             let start: usize = i;
             let token_line: i32 = line;
             let token_column: i32 = column;
@@ -284,7 +257,7 @@ fn lex(data: *u8, len: usize) -> TokenBuffer {
             tokens = push_token(tokens, make_token(kind, start, i - start, token_line, token_column));
 
             column = column + ((i - start) as i32);
-        } else if is_digit(c) {
+        } else if ascii_is_digit(c) {
             let start: usize = i;
             let token_line: i32 = line;
             let token_column: i32 = column;

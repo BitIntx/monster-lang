@@ -1,0 +1,42 @@
+// Debugging conveniences layered on the tiny assertion module.
+
+import "std/assert.mnst";
+
+fn debug_assert_true(value: bool) -> void {
+    assert_true(value);
+    return;
+}
+
+fn debug_assert_false(value: bool) -> void {
+    assert_false(value);
+    return;
+}
+
+fn debug_assert_i32_eq(expected: i32, actual: i32) -> void {
+    assert_i32_eq(expected, actual);
+    return;
+}
+
+fn debug_assert_usize_eq(expected: usize, actual: usize) -> void {
+    assert_usize_eq(expected, actual);
+    return;
+}
+
+fn debug_assert_str_eq(expected: str, actual: str) -> void {
+    assert_str_eq(expected, actual);
+    return;
+}
+
+fn debug_todo(message: str) -> void {
+    print_str("TODO: ");
+    print_ln_str(message);
+    assert_false(true);
+    return;
+}
+
+fn debug_unreachable(message: str) -> void {
+    print_str("unreachable: ");
+    print_ln_str(message);
+    assert_false(true);
+    return;
+}

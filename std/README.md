@@ -12,10 +12,22 @@ Current modules:
 
 - `assert.mnst`: fail-fast assertion helpers for examples and early
   Monster-written tests.
+- `ascii.mnst`: byte-oriented ASCII classification, identifier helpers, and
+  case conversion.
+- `debug.mnst`: debug assertions plus `todo` / `unreachable` style fail-fast
+  helpers.
 - `fs.mnst`: a small `FileBytes` wrapper around `read_file`, `write_file`,
   and `std/mem.mnst` cleanup.
+- `io.mnst`: stable importable wrappers around the current print, read, and
+  file I/O builtins.
 - `mem.mnst`: byte-oriented allocation and memory helpers around `calloc`,
   `free`, `memcpy`, and `memcmp`.
+- `num.mnst`: small scalar helpers plus byte-slice decimal parsing.
+- `path.mnst`: C-string path helpers for separators, basenames, and
+  extensions.
+- `process.mnst`: tiny process exit and `argc` / `argv` convenience helpers.
+- `result.mnst`: result-code constants and helpers until Monster grows a
+  generic `Result<T, E>`.
 - `str.mnst`: small C-style string helpers around `strlen`, `str_eq`, and
   string-to-byte-buffer copying.
 - `vec_i32.mnst`: a concrete growable `VecI32` built with `malloc`, `realloc`,

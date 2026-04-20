@@ -1,0 +1,73 @@
+// C-string path helpers.
+//
+// Functions return borrowed slices into the original NUL-terminated string when
+// possible. They do not allocate or normalize paths.
+
+import "std/str.mnst";
+
+const PATH_SEPARATOR_UNIX: u8 = 47 as u8;
+const PATH_SEPARATOR_WINDOWS: u8 = 92 as u8;
+const PATH_DOT: u8 = 46 as u8;
+
+fn path_is_sep(c: u8) -> bool {
+    return c == PATH_SEPARATOR_UNIX || c == PATH_SEPARATOR_WINDOWS;
+}
+
+fn path_basename_index(path: str) -> usize {
+    let data: *u8 = path as *u8;
+    let len: usize = str_len(path);
+    let mut i: usize = 0 as usize;
+    let mut start: usize = 0 as usize;
+
+    while i < len {
+        if path_is_sep(data[i]) {
+            start = i + (1 as usize);
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return start;
+}
+
+fn path_basename(path: str) -> str {
+    let data: *u8 = path as *u8;
+    return &data[path_basename_index(path)] as str;
+}
+
+fn path_extension_index(path: str) -> usize {
+    let data: *u8 = path as *u8;
+    let base: usize = path_basename_index(path);
+    let mut i: usize = str_len(path);
+
+    while i > base {
+        i = i - (1 as usize);
+
+        if data[i] == PATH_DOT {
+            return i;
+        }
+    }
+
+    return str_len(path);
+}
+
+fn path_has_extension(path: str, extension: str) -> bool {
+    let data: *u8 = path as *u8;
+    let path_len: usize = str_len(path);
+    let ext_len: usize = str_len(extension);
+    let ext_start: usize = path_extension_index(path);
+
+    if ext_start == path_len {
+        return false;
+    }
+
+    if path_len - ext_start != ext_len {
+        return false;
+    }
+
+    return memcmp(&data[ext_start], extension as *u8, ext_len) == 0;
+}
+
+fn path_is_mnst(path: str) -> bool {
+    return path_has_extension(path, ".mnst");
+}
