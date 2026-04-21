@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{BinOp, Expr, Function, Program, Stmt, Type, UnaryOp};
+use crate::builtins::runtime_builtins;
 
 pub fn analyze_program(program: &Program) -> Result<(), String> {
     let mut analyzer = Analyzer::new();
@@ -959,105 +960,15 @@ impl Analyzer {
     }
 
     fn install_builtins(&mut self) {
-        self.functions.insert(
-            "print_i32".to_string(),
-            FunctionSig {
-                params: vec![Type::I32],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "print_bool".to_string(),
-            FunctionSig {
-                params: vec![Type::Bool],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "print_str".to_string(),
-            FunctionSig {
-                params: vec![Type::Str],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "print_ln_i32".to_string(),
-            FunctionSig {
-                params: vec![Type::I32],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "print_ln_bool".to_string(),
-            FunctionSig {
-                params: vec![Type::Bool],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "print_ln_str".to_string(),
-            FunctionSig {
-                params: vec![Type::Str],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "read_i32".to_string(),
-            FunctionSig {
-                params: vec![],
-                ret_type: Type::I32,
-            },
-        );
-        self.functions.insert(
-            "read_file".to_string(),
-            FunctionSig {
-                params: vec![Type::Str, Type::Ptr(Box::new(Type::USize))],
-                ret_type: Type::Ptr(Box::new(Type::U8)),
-            },
-        );
-        self.functions.insert(
-            "write_file".to_string(),
-            FunctionSig {
-                params: vec![Type::Str, Type::Ptr(Box::new(Type::U8)), Type::USize],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "strlen".to_string(),
-            FunctionSig {
-                params: vec![Type::Str],
-                ret_type: Type::USize,
-            },
-        );
-        self.functions.insert(
-            "memcmp".to_string(),
-            FunctionSig {
-                params: vec![
-                    Type::Ptr(Box::new(Type::U8)),
-                    Type::Ptr(Box::new(Type::U8)),
-                    Type::USize,
-                ],
-                ret_type: Type::I32,
-            },
-        );
-        self.functions.insert(
-            "memcpy".to_string(),
-            FunctionSig {
-                params: vec![
-                    Type::Ptr(Box::new(Type::U8)),
-                    Type::Ptr(Box::new(Type::U8)),
-                    Type::USize,
-                ],
-                ret_type: Type::Void,
-            },
-        );
-        self.functions.insert(
-            "str_eq".to_string(),
-            FunctionSig {
-                params: vec![Type::Str, Type::Str],
-                ret_type: Type::Bool,
-            },
-        );
+        for builtin in runtime_builtins() {
+            self.functions.insert(
+                builtin.name.to_string(),
+                FunctionSig {
+                    params: builtin.params,
+                    ret_type: builtin.ret_type,
+                },
+            );
+        }
     }
 
     fn analyze_len_call(&mut self, args: &[Expr]) -> Result<Type, String> {

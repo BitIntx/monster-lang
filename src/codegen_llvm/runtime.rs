@@ -1,110 +1,22 @@
 use std::collections::HashMap;
 
-use crate::ast::Type;
+use crate::builtins::{
+    runtime_builtin_llvm_name, runtime_builtins, runtime_declared_function as is_runtime_declared,
+};
 
 use super::FunctionSig;
 
 pub(super) fn builtin_signatures() -> HashMap<String, FunctionSig> {
     let mut sigs = HashMap::new();
-    sigs.insert(
-        "print_i32".to_string(),
-        FunctionSig {
-            params: vec![Type::I32],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "print_bool".to_string(),
-        FunctionSig {
-            params: vec![Type::Bool],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "print_str".to_string(),
-        FunctionSig {
-            params: vec![Type::Str],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "print_ln_i32".to_string(),
-        FunctionSig {
-            params: vec![Type::I32],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "print_ln_bool".to_string(),
-        FunctionSig {
-            params: vec![Type::Bool],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "print_ln_str".to_string(),
-        FunctionSig {
-            params: vec![Type::Str],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "read_i32".to_string(),
-        FunctionSig {
-            params: vec![],
-            ret_type: Type::I32,
-        },
-    );
-    sigs.insert(
-        "read_file".to_string(),
-        FunctionSig {
-            params: vec![Type::Str, Type::Ptr(Box::new(Type::USize))],
-            ret_type: Type::Ptr(Box::new(Type::U8)),
-        },
-    );
-    sigs.insert(
-        "write_file".to_string(),
-        FunctionSig {
-            params: vec![Type::Str, Type::Ptr(Box::new(Type::U8)), Type::USize],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "strlen".to_string(),
-        FunctionSig {
-            params: vec![Type::Str],
-            ret_type: Type::USize,
-        },
-    );
-    sigs.insert(
-        "memcmp".to_string(),
-        FunctionSig {
-            params: vec![
-                Type::Ptr(Box::new(Type::U8)),
-                Type::Ptr(Box::new(Type::U8)),
-                Type::USize,
-            ],
-            ret_type: Type::I32,
-        },
-    );
-    sigs.insert(
-        "memcpy".to_string(),
-        FunctionSig {
-            params: vec![
-                Type::Ptr(Box::new(Type::U8)),
-                Type::Ptr(Box::new(Type::U8)),
-                Type::USize,
-            ],
-            ret_type: Type::Void,
-        },
-    );
-    sigs.insert(
-        "str_eq".to_string(),
-        FunctionSig {
-            params: vec![Type::Str, Type::Str],
-            ret_type: Type::Bool,
-        },
-    );
+    for builtin in runtime_builtins() {
+        sigs.insert(
+            builtin.name.to_string(),
+            FunctionSig {
+                params: builtin.params,
+                ret_type: builtin.ret_type,
+            },
+        );
+    }
     sigs
 }
 
@@ -322,40 +234,11 @@ pub(super) fn emit_runtime_prelude() -> String {
 }
 
 pub(super) fn runtime_declared_function(name: &str) -> bool {
-    matches!(
-        name,
-        "printf"
-            | "puts"
-            | "scanf"
-            | "fopen"
-            | "fclose"
-            | "fseek"
-            | "ftell"
-            | "fread"
-            | "fwrite"
-            | "calloc"
-            | "strlen"
-            | "memcmp"
-            | "memcpy"
-            | "exit"
-    )
+    is_runtime_declared(name)
 }
 
 pub(super) fn llvm_function_name(name: &str) -> String {
-    match name {
-        "print_i32" => "@__monster_builtin_print_i32".to_string(),
-        "print_bool" => "@__monster_builtin_print_bool".to_string(),
-        "print_str" => "@__monster_builtin_print_str".to_string(),
-        "print_ln_i32" => "@__monster_builtin_print_ln_i32".to_string(),
-        "print_ln_bool" => "@__monster_builtin_print_ln_bool".to_string(),
-        "print_ln_str" => "@__monster_builtin_print_ln_str".to_string(),
-        "read_i32" => "@__monster_builtin_read_i32".to_string(),
-        "read_file" => "@__monster_builtin_read_file".to_string(),
-        "write_file" => "@__monster_builtin_write_file".to_string(),
-        "strlen" => "@__monster_builtin_strlen".to_string(),
-        "memcmp" => "@__monster_builtin_memcmp".to_string(),
-        "memcpy" => "@__monster_builtin_memcpy".to_string(),
-        "str_eq" => "@__monster_builtin_str_eq".to_string(),
-        _ => format!("@{}", name.replace('.', "__")),
-    }
+    runtime_builtin_llvm_name(name)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("@{}", name.replace('.', "__")))
 }

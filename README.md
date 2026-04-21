@@ -126,7 +126,7 @@ mst --help
 mst --version
 ```
 
-Generated binaries and intermediate LLVM files are written to `target/mst/`.
+Generated binaries and intermediate LLVM files are written to path-scoped subdirectories under `target/mst/`, so files with the same name in different folders do not overwrite each other.
 `--debug` selects the debug build profile, defaults to `--opt-level 0`, and links with `clang -g`.
 Release builds default to `--opt-level 2`.
 Use `--release`, `--opt-level 0|1|2|3`, and `--cpu generic|native` to tune build behavior.
@@ -330,7 +330,7 @@ fn main() -> i32 {
 }
 ```
 
-The first small standard-library modules live under [`std/`](./std). They cover fail-fast checks, ASCII and number helpers, debug helpers, file and process wrappers, byte memory, paths, result codes, C-style strings, and a concrete growable vector. Imports under `std/` are resolved through `MST_STD_PATH`, the installed `share/mst/std` directory, and the compiler checkout's `std/` directory. See [`examples/std_core.mnst`](./examples/std_core.mnst) for a compact tour of the convenience modules and [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example. [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) shows the raw LLVM IR emitted by the current compiler.
+The first small standard-library modules live under [`std/`](./std). They cover fail-fast checks, ASCII and number helpers, debug helpers, file and process wrappers, byte memory, byte slices, paths, result codes, C-style strings, string parsing, and a concrete growable vector. Imports under `std/` are resolved through `MST_STD_PATH`, the installed `share/mst/std` directory, and the compiler checkout's `std/` directory. See [`examples/std_core.mnst`](./examples/std_core.mnst) for a compact tour of the convenience modules, [`examples/std_slice_parse.mnst`](./examples/std_slice_parse.mnst) for slice/search/parsing helpers, and [`examples/growable_vec_i32.mnst`](./examples/growable_vec_i32.mnst) for a full `VecI32` example. [`examples/growable_vec_i32.ll`](./examples/growable_vec_i32.ll) shows the raw LLVM IR emitted by the current compiler.
 
 Monster also supports file-based imports plus loop control. If you save this snippet at the repository root, it can import the checked-in helper at [`examples/imports/math.mnst`](./examples/imports/math.mnst):
 
@@ -430,6 +430,7 @@ GitHub Actions runs the compiler on `ubuntu-latest` and checks:
 - [`examples/string_bytes.mnst`](./examples/string_bytes.mnst): `std/str.mnst` and `std/mem.mnst` helpers against a copied C string buffer
 - [`examples/std_core.mnst`](./examples/std_core.mnst): a compact tour of `std/ascii.mnst`, `std/num.mnst`, `std/io.mnst`, `std/path.mnst`, `std/process.mnst`, `std/result.mnst`, and `std/debug.mnst`
 - [`examples/std_fs_assert.mnst`](./examples/std_fs_assert.mnst): `std/fs.mnst` file helpers plus `std/assert.mnst` executable checks
+- [`examples/std_slice_parse.mnst`](./examples/std_slice_parse.mnst): byte-slice comparison/search helpers plus string parsing helpers
 
 ## Roadmap
 

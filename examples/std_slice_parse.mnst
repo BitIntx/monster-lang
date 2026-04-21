@@ -1,0 +1,29 @@
+// Byte-slice and string parsing helpers from std.
+
+import "std/debug.mnst";
+import "std/io.mnst";
+import "std/slice.mnst";
+import "std/str.mnst";
+import "std/str_parse.mnst";
+
+fn main() -> i32 {
+    let text: str = "alpha,beta,gamma";
+    let data: *u8 = text as *u8;
+    let len: usize = str_len(text);
+    let comma: u8 = ("," as *u8)[0];
+
+    debug_assert_true(slice_u8_starts_with(data, len, "alpha"));
+    debug_assert_true(slice_u8_ends_with(data, len, "gamma"));
+    debug_assert_true(slice_u8_contains_str(data, len, "beta"));
+    debug_assert_usize_eq(5 as usize, slice_u8_find_byte(data, len, comma));
+    debug_assert_usize_eq(2 as usize, slice_u8_count_byte(data, len, comma));
+
+    debug_assert_true(str_is_i32("-42"));
+    debug_assert_true(str_is_digits("12345"));
+    debug_assert_i32_eq(-42, str_parse_i32_or("-42", 0));
+    debug_assert_usize_eq(12345 as usize, str_parse_usize_or("12345", 0 as usize));
+    debug_assert_i32_eq(7, str_parse_i32_or("nope", 7));
+
+    io_print_ln_str("slice and parse ok");
+    return 0;
+}

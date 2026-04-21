@@ -1,5 +1,6 @@
 import "token.mnst";
 import "std/ascii.mnst";
+import "std/slice.mnst";
 
 struct TokenBuffer {
     data: *Token,
@@ -30,11 +31,7 @@ fn push_token(tokens: TokenBuffer, token: Token) -> TokenBuffer {
 }
 
 fn keyword_eq(data: *u8, start: usize, len: usize, text: str) -> bool {
-    if len != strlen(text) {
-        return false;
-    }
-
-    return memcmp(&data[start], text as *u8, len) == 0;
+    return slice_u8_eq_str(&data[start], len, text);
 }
 
 fn classify_identifier(data: *u8, start: usize, len: usize) -> TokenKind {

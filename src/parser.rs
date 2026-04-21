@@ -4,6 +4,7 @@ use crate::ast::{
     BinOp, ConstDef, EnumDef, EnumVariant, Expr, Function, ImportDecl, MatchArm, MatchPattern,
     Program, Stmt, StructDef, Type, UnaryOp,
 };
+use crate::diagnostic::{Diagnostic, SourceSpan};
 use crate::token::{Token, TokenKind};
 
 pub struct Parser {
@@ -131,10 +132,12 @@ impl Parser {
             self.advance();
             Ok(token)
         } else {
-            Err(format!(
-                "expected {:?}, found {:?} at {}:{}",
-                kind, token.kind, token.line, token.column
-            ))
+            Err(Diagnostic::expected(
+                SourceSpan::new(token.line, token.column),
+                format!("{kind:?}"),
+                format!("{:?}", token.kind),
+            )
+            .to_string())
         }
     }
 
@@ -144,10 +147,12 @@ impl Parser {
             self.advance();
             Ok(token)
         } else {
-            Err(format!(
-                "expected identifier, found {:?} at {}:{}",
-                token.kind, token.line, token.column
-            ))
+            Err(Diagnostic::expected(
+                SourceSpan::new(token.line, token.column),
+                "identifier",
+                format!("{:?}", token.kind),
+            )
+            .to_string())
         }
     }
 

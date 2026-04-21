@@ -28,7 +28,11 @@ Current modules:
 - `process.mnst`: tiny process exit and `argc` / `argv` convenience helpers.
 - `result.mnst`: result-code constants and helpers until Monster grows a
   generic `Result<T, E>`.
+- `slice.mnst`: allocation-free byte-slice comparison and search helpers for
+  pointer + length data.
 - `str.mnst`: small C-style string helpers around `strlen`, `str_eq`, and
   string-to-byte-buffer copying.
+- `str_parse.mnst`: C-string parsing helpers for digits, signed `i32`, and
+  `usize`.
 - `vec_i32.mnst`: a concrete growable `VecI32` built with `malloc`, `realloc`,
   `free`, raw pointers, and `defer`-friendly cleanup.

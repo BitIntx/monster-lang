@@ -6,7 +6,7 @@ self-hosted compiler pieces.
 Current contents:
 
 - `token.mnst`: token kind enum and token struct used by the prototype lexer
-- `lexer.mnst`: Monster-written lexer prototype that scans a source buffer into a `TokenBuffer` and uses `std/ascii.mnst` for byte classification
+- `lexer.mnst`: Monster-written lexer prototype that scans a source buffer into a `TokenBuffer` and uses `std/ascii.mnst` / `std/slice.mnst` for byte classification and keyword matching
 - `main.mnst`: CLI entrypoint that reads a `.mnst` file with `read_file` and runs the lexer prototype
 
 Run it with the current Rust compiler:

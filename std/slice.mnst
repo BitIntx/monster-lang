@@ -1,0 +1,102 @@
+// Byte-slice helpers for pointer + length data.
+//
+// Search helpers return `len` as the "not found" sentinel. This keeps the API
+// allocation-free and usable before Monster has generic Option<T>.
+
+import "std/str.mnst";
+
+fn slice_u8_is_empty(len: usize) -> bool {
+    return len == (0 as usize);
+}
+
+fn slice_u8_eq(lhs: *u8, lhs_len: usize, rhs: *u8, rhs_len: usize) -> bool {
+    if lhs_len != rhs_len {
+        return false;
+    }
+
+    if lhs_len == (0 as usize) {
+        return true;
+    }
+
+    return memcmp(lhs, rhs, lhs_len) == 0;
+}
+
+fn slice_u8_eq_str(data: *u8, len: usize, text: str) -> bool {
+    return slice_u8_eq(data, len, text as *u8, str_len(text));
+}
+
+fn slice_u8_starts_with(data: *u8, len: usize, prefix: str) -> bool {
+    let prefix_len: usize = str_len(prefix);
+
+    if prefix_len > len {
+        return false;
+    }
+
+    return slice_u8_eq(data, prefix_len, prefix as *u8, prefix_len);
+}
+
+fn slice_u8_ends_with(data: *u8, len: usize, suffix: str) -> bool {
+    let suffix_len: usize = str_len(suffix);
+
+    if suffix_len > len {
+        return false;
+    }
+
+    return slice_u8_eq(&data[len - suffix_len], suffix_len, suffix as *u8, suffix_len);
+}
+
+fn slice_u8_find_byte(data: *u8, len: usize, value: u8) -> usize {
+    let mut i: usize = 0 as usize;
+
+    while i < len {
+        if data[i] == value {
+            return i;
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return len;
+}
+
+fn slice_u8_contains_byte(data: *u8, len: usize, value: u8) -> bool {
+    return slice_u8_find_byte(data, len, value) != len;
+}
+
+fn slice_u8_count_byte(data: *u8, len: usize, value: u8) -> usize {
+    let mut i: usize = 0 as usize;
+    let mut count: usize = 0 as usize;
+
+    while i < len {
+        if data[i] == value {
+            count = count + (1 as usize);
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return count;
+}
+
+fn slice_u8_find_str(data: *u8, len: usize, needle: str) -> usize {
+    let needle_len: usize = str_len(needle);
+    let mut i: usize = 0 as usize;
+
+    if needle_len == (0 as usize) {
+        return 0 as usize;
+    }
+
+    while i + needle_len <= len {
+        if slice_u8_eq(&data[i], needle_len, needle as *u8, needle_len) {
+            return i;
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return len;
+}
+
+fn slice_u8_contains_str(data: *u8, len: usize, needle: str) -> bool {
+    return slice_u8_find_str(data, len, needle) != len;
+}

@@ -1,0 +1,88 @@
+// String parsing helpers layered on ASCII and number utilities.
+
+import "std/ascii.mnst";
+import "std/num.mnst";
+import "std/str.mnst";
+
+const STR_PARSE_MINUS: u8 = 45 as u8;
+
+fn str_is_digits(value: str) -> bool {
+    let data: *u8 = value as *u8;
+    let len: usize = str_len(value);
+    let mut i: usize = 0 as usize;
+
+    if len == (0 as usize) {
+        return false;
+    }
+
+    while i < len {
+        if !ascii_is_digit(data[i]) {
+            return false;
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return true;
+}
+
+fn str_is_i32(value: str) -> bool {
+    let data: *u8 = value as *u8;
+    let len: usize = str_len(value);
+    let mut i: usize = 0 as usize;
+
+    if len == (0 as usize) {
+        return false;
+    }
+
+    if data[0] == STR_PARSE_MINUS {
+        if len == (1 as usize) {
+            return false;
+        }
+
+        i = 1 as usize;
+    }
+
+    while i < len {
+        if !ascii_is_digit(data[i]) {
+            return false;
+        }
+
+        i = i + (1 as usize);
+    }
+
+    return true;
+}
+
+fn str_parse_i32_or(value: str, fallback: i32) -> i32 {
+    let data: *u8 = value as *u8;
+    let len: usize = str_len(value);
+
+    if !str_is_i32(value) {
+        return fallback;
+    }
+
+    if data[0] == STR_PARSE_MINUS {
+        return -num_parse_i32_digits(&data[1], len - (1 as usize));
+    }
+
+    return num_parse_i32_digits(data, len);
+}
+
+fn str_parse_usize_or(value: str, fallback: usize) -> usize {
+    let data: *u8 = value as *u8;
+    let len: usize = str_len(value);
+    let mut i: usize = 0 as usize;
+    let mut parsed: usize = 0 as usize;
+
+    if !str_is_digits(value) {
+        return fallback;
+    }
+
+    while i < len {
+        parsed = parsed * (10 as usize) + (ascii_digit_to_i32(data[i]) as usize);
+        i = i + (1 as usize);
+    }
+
+    return parsed;
+}

@@ -1,5 +1,8 @@
 mod ast;
+mod build;
+mod builtins;
 mod codegen_llvm;
+mod diagnostic;
 mod lexer;
 mod parser;
 mod semantic;
@@ -13,7 +16,11 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+
+pub(crate) use build::{
+    BuildMode, BuildOptions, OptLevel, TargetCpu, build_artifact_dir, build_to_binary,
+};
 
 #[cfg(not(windows))]
 const UNIX_INSTALL_SCRIPT_URL: &str =
@@ -21,12 +28,6 @@ const UNIX_INSTALL_SCRIPT_URL: &str =
 #[cfg(windows)]
 const WINDOWS_INSTALL_SCRIPT_URL: &str =
     "https://raw.githubusercontent.com/BitIntx/monster-lang/main/install/install-release.ps1";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BuildMode {
-    Release,
-    Debug,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BuildArgs {
@@ -38,27 +39,6 @@ struct BuildArgs {
 struct ResolvedBuildArgs {
     input: String,
     options: BuildOptions,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OptLevel {
-    O0,
-    O1,
-    O2,
-    O3,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TargetCpu {
-    Generic,
-    Native,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct BuildOptions {
-    mode: BuildMode,
-    opt_level: OptLevel,
-    cpu: TargetCpu,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -102,68 +82,6 @@ struct BuildConfig {
 struct LoadKey {
     path: PathBuf,
     namespace: Option<String>,
-}
-
-impl BuildMode {
-    fn default_opt_level(self) -> OptLevel {
-        match self {
-            BuildMode::Release => OptLevel::O2,
-            BuildMode::Debug => OptLevel::O0,
-        }
-    }
-}
-
-impl OptLevel {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "0" => Ok(Self::O0),
-            "1" => Ok(Self::O1),
-            "2" => Ok(Self::O2),
-            "3" => Ok(Self::O3),
-            _ => Err(format!(
-                "invalid opt level '{value}', expected 0, 1, 2, or 3"
-            )),
-        }
-    }
-
-    fn as_u8(self) -> u8 {
-        match self {
-            Self::O0 => 0,
-            Self::O1 => 1,
-            Self::O2 => 2,
-            Self::O3 => 3,
-        }
-    }
-
-    fn clang_arg(self) -> String {
-        format!("-O{}", self.as_u8())
-    }
-
-    fn is_optimizing(self) -> bool {
-        self != Self::O0
-    }
-}
-
-impl TargetCpu {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "generic" => Ok(Self::Generic),
-            "native" => Ok(Self::Native),
-            _ => Err(format!(
-                "invalid cpu target '{value}', expected 'generic' or 'native'"
-            )),
-        }
-    }
-}
-
-impl Default for BuildOptions {
-    fn default() -> Self {
-        Self {
-            mode: BuildMode::Release,
-            opt_level: BuildMode::Release.default_opt_level(),
-            cpu: TargetCpu::Generic,
-        }
-    }
 }
 
 fn main() {
@@ -1459,126 +1377,7 @@ fn qualify_function_name(namespace: Option<&str>, name: &str) -> String {
 }
 
 fn is_loader_builtin_function(name: &str) -> bool {
-    matches!(
-        name,
-        "len"
-            | "slice"
-            | "is"
-            | "payload"
-            | "print_i32"
-            | "print_bool"
-            | "print_str"
-            | "print_ln_i32"
-            | "print_ln_bool"
-            | "print_ln_str"
-            | "read_i32"
-            | "read_file"
-            | "write_file"
-            | "strlen"
-            | "memcmp"
-            | "memcpy"
-            | "str_eq"
-    )
-}
-
-fn build_to_binary(input: &str, options: &BuildOptions) -> Result<PathBuf, String> {
-    let program = load_program(input)?;
-    let llvm_ir = emit_llvm_program(&program)?;
-
-    let input_path = Path::new(input);
-    let stem = input_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| format!("invalid input filename: '{input}'"))?;
-
-    let artifact_dir = build_artifact_dir()?;
-    let ll_path = artifact_dir.join(format!("{stem}.ll"));
-    let opt_ll_path = artifact_dir.join(format!("{stem}.opt.ll"));
-    let out_path = artifact_dir.join(stem);
-
-    fs::create_dir_all(&artifact_dir).map_err(|e| {
-        format!(
-            "failed to create build artifact directory '{}': {}",
-            artifact_dir.display(),
-            e
-        )
-    })?;
-
-    fs::write(&ll_path, llvm_ir)
-        .map_err(|e| format!("failed to write '{}': {}", ll_path.display(), e))?;
-
-    verify_llvm_ir(&ll_path)?;
-
-    let compile_input = if options.opt_level.is_optimizing() {
-        optimize_llvm_ir(&ll_path, &opt_ll_path, options.opt_level)?;
-        verify_llvm_ir(&opt_ll_path)?;
-        opt_ll_path.as_path()
-    } else {
-        if opt_ll_path.exists() {
-            fs::remove_file(&opt_ll_path).map_err(|e| {
-                format!(
-                    "failed to remove stale optimized LLVM IR '{}': {}",
-                    opt_ll_path.display(),
-                    e
-                )
-            })?;
-        }
-        ll_path.as_path()
-    };
-
-    compile_to_native(input, compile_input, &out_path, options)?;
-
-    fs::canonicalize(&out_path).map_err(|e| {
-        format!(
-            "built '{}', but failed to resolve output path '{}': {}",
-            input,
-            out_path.display(),
-            e
-        )
-    })
-}
-
-fn compile_to_native(
-    input: &str,
-    llvm_input: &Path,
-    output_path: &Path,
-    options: &BuildOptions,
-) -> Result<(), String> {
-    let clang = find_tool(&["clang-22", "clang"])
-        .ok_or_else(|| "failed to find clang-22 or clang on PATH".to_string())?;
-
-    let mut command = Command::new(&clang);
-    command.arg(llvm_input);
-    command.arg(options.opt_level.clang_arg());
-
-    if options.mode == BuildMode::Debug {
-        command.arg("-g");
-    }
-
-    if options.cpu == TargetCpu::Native {
-        command.arg("-march=native");
-    }
-
-    let output = command
-        .arg("-o")
-        .arg(output_path)
-        .output()
-        .map_err(|e| format!("failed to execute {}: {}", clang, e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "{} failed while building '{}':\n{}",
-            clang, input, stderr
-        ));
-    }
-
-    Ok(())
-}
-
-fn build_artifact_dir() -> Result<PathBuf, String> {
-    let cwd = env::current_dir().map_err(|e| format!("failed to get current directory: {e}"))?;
-    Ok(cwd.join("target").join("mst"))
+    builtins::is_compiler_builtin(name)
 }
 
 fn clean_artifacts(path: &Path) -> Result<(), String> {
@@ -1592,74 +1391,6 @@ fn clean_artifacts(path: &Path) -> Result<(), String> {
             path.display(),
             e
         )
-    })
-}
-
-fn optimize_llvm_ir(input: &Path, output: &Path, opt_level: OptLevel) -> Result<(), String> {
-    let opt = find_tool(&["opt-22", "opt"])
-        .ok_or_else(|| "failed to find opt-22 or opt on PATH".to_string())?;
-    let passes = format!("default<O{}>", opt_level.as_u8());
-
-    let command_output = Command::new(&opt)
-        .arg(format!("-passes={passes}"))
-        .arg("-S")
-        .arg(input)
-        .arg("-o")
-        .arg(output)
-        .output()
-        .map_err(|e| format!("failed to execute {}: {}", opt, e))?;
-
-    if !command_output.status.success() {
-        let stderr = String::from_utf8_lossy(&command_output.stderr);
-        return Err(format!(
-            "{} failed while optimizing LLVM IR '{}':\n{}",
-            opt,
-            input.display(),
-            stderr
-        ));
-    }
-
-    Ok(())
-}
-
-fn verify_llvm_ir(path: &Path) -> Result<(), String> {
-    let opt = find_tool(&["opt-22", "opt"])
-        .ok_or_else(|| "failed to find opt-22 or opt on PATH".to_string())?;
-
-    let output = Command::new(&opt)
-        .arg("-passes=verify")
-        .arg("-disable-output")
-        .arg(path)
-        .output()
-        .map_err(|e| format!("failed to execute {}: {}", opt, e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "{} rejected generated LLVM IR '{}':\n{}",
-            opt,
-            path.display(),
-            stderr
-        ));
-    }
-
-    Ok(())
-}
-
-fn find_tool(candidates: &[&str]) -> Option<String> {
-    candidates.iter().find_map(|candidate| {
-        let status = Command::new(candidate)
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok()?;
-
-        if status.success() {
-            Some((*candidate).to_string())
-        } else {
-            None
-        }
     })
 }
 
@@ -1759,6 +1490,39 @@ mod tests {
         let err = parse_build_args(vec!["--wat".to_string(), "exam.mnst".to_string()].into_iter())
             .unwrap_err();
         assert!(err.contains("unknown option"));
+    }
+
+    #[test]
+    fn source_artifact_dirs_are_scoped_by_input_path() {
+        let temp_dir = unique_temp_dir("monster-artifacts");
+        let left_dir = temp_dir.join("left");
+        let right_dir = temp_dir.join("right");
+        fs::create_dir_all(&left_dir).unwrap();
+        fs::create_dir_all(&right_dir).unwrap();
+
+        let left_main = left_dir.join("main.mnst");
+        let right_main = right_dir.join("main.mnst");
+        fs::write(&left_main, "fn main() -> i32 { return 0; }\n").unwrap();
+        fs::write(&right_main, "fn main() -> i32 { return 1; }\n").unwrap();
+
+        let left_artifacts = crate::build::source_artifact_dir(&left_main).unwrap();
+        let right_artifacts = crate::build::source_artifact_dir(&right_main).unwrap();
+
+        assert_ne!(left_artifacts, right_artifacts);
+        assert!(
+            left_artifacts
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("main-"))
+        );
+        assert!(
+            right_artifacts
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("main-"))
+        );
+
+        fs::remove_dir_all(temp_dir).unwrap();
     }
 
     #[test]

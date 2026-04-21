@@ -50,7 +50,7 @@ mst --version</code></pre>
 mst run --debug exam.mnst
 mst build --release --opt-level 3 --cpu native exam.mnst</code></pre>
             <p>
-              Debug builds keep the raw LLVM IR in <code>target/mst/</code>, default to <code>--opt-level 0</code>,
+              Debug builds keep the raw LLVM IR in path-scoped subdirectories under <code>target/mst/</code>, default to <code>--opt-level 0</code>,
               and link with <code>clang -g</code>. Release builds default to <code>--opt-level 2</code>.
               Use <code>--opt-level 0|1|2|3</code> and <code>--cpu generic|native</code> when you want
               to tune the LLVM and clang pipeline.
@@ -89,8 +89,8 @@ cpu = "generic"</code></pre>
           <section class="section" id="output">
             <h2>Build Output</h2>
             <p>
-              Generated binaries and intermediate LLVM files live in <code>target/mst/</code>.
-              This keeps project roots clean while preserving artifacts useful for debugging.
+              Generated binaries and intermediate LLVM files live in path-scoped subdirectories under <code>target/mst/</code>.
+              This keeps project roots clean, avoids collisions between same-named source files, and preserves artifacts useful for debugging.
             </p>
           </section>
 
